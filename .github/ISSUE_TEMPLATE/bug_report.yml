@@ -1,0 +1,47 @@
+name: Bug report
+description: Report something that isn't working as expected
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for filing a bug. Please fill in the details below.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I press the hotkey on a Chinese chat, ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Set target language to ...
+        3. Press the hotkey
+        4. See ...
+    validations:
+      required: true
+  - type: input
+    id: languages
+    attributes:
+      label: Target / source languages
+      placeholder: "Source: Auto, Target: English"
+  - type: input
+    id: version
+    attributes:
+      label: WinLens version
+      placeholder: "v1.0.0"
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2"
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / logs
+      description: If useful, add screenshots. The log is at %TEMP%\winlens.log.
