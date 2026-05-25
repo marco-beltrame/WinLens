@@ -120,7 +120,7 @@
                 <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,22,0,14"/>
                 <TextBlock x:Name="FooterText" Style="{StaticResource CaptionText}"
                            HorizontalAlignment="Center"
-                           Text="WinLens v1.1  ·  Google &amp; MyMemory translation"/>
+                           Text="WinLens v1.1"/>
             </StackPanel>
         </Grid>
     </Border>
