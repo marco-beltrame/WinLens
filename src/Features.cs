@@ -7,9 +7,6 @@ namespace WinLens;
 /// </summary>
 public static class Features
 {
-#if DEBUG
+    // Recent target languages pinned atop the picker. Shipped on after testing in Debug.
     public const bool RecentLanguages = true;
-#else
-    public const bool RecentLanguages = false;
-#endif
 }
