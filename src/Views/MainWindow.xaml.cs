@@ -100,6 +100,7 @@ public partial class MainWindow : Window, IDisposable
     {
         if (_busy) return;
         _busy = true;
+        LoadingOverlay? loading = null;
         try
         {
             // Make sure our own settings window isn't captured in the screenshot.
@@ -110,6 +111,10 @@ public partial class MainWindow : Window, IDisposable
             }
 
             var capture = ScreenCapture.CaptureVirtualScreen();
+
+            // Show the spinner only after the capture, so it isn't in the screenshot.
+            loading = new LoadingOverlay();
+            loading.Show();
 
             var blocks = await _ocr.RecognizeAsync(capture.Bitmap, _settings.Current.SourceLanguage);
             if (blocks.Count == 0)
@@ -137,6 +142,9 @@ public partial class MainWindow : Window, IDisposable
                     _settings.Current.TargetLanguage = code;
                     _settings.Save(_settings.Current);
                 });
+
+            loading.Close();
+            loading = null;
             overlay.Show();
         }
         catch (Exception ex)
@@ -145,6 +153,7 @@ public partial class MainWindow : Window, IDisposable
         }
         finally
         {
+            loading?.Close();
             _busy = false;
         }
     }

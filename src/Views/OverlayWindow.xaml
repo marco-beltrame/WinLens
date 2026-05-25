@@ -27,17 +27,8 @@
                 <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="4" Opacity="0.5"/>
             </Border.Effect>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Width="22" Height="22" CornerRadius="6"
-                        Background="{StaticResource AccentGradient}" Margin="0,0,10,0">
-                    <Viewbox Width="13" Height="13">
-                        <Canvas Width="24" Height="24">
-                            <Ellipse Canvas.Left="3" Canvas.Top="3" Width="13" Height="13"
-                                     Stroke="White" StrokeThickness="2.2"/>
-                            <Line X1="14" Y1="14" X2="21" Y2="21" Stroke="White" StrokeThickness="2.2"
-                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        </Canvas>
-                    </Viewbox>
-                </Border>
+                <Image Width="22" Height="22" Source="/assets/logo.png" Margin="0,0,10,0"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
                 <TextBlock Text="WinLens" Foreground="{StaticResource TextBrush}"
                            FontFamily="Segoe UI" FontWeight="SemiBold"
                            VerticalAlignment="Center" Margin="0,0,14,0"/>

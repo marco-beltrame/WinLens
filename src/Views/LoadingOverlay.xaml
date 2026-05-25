@@ -1,0 +1,57 @@
+<Window x:Class="WinLens.Views.LoadingOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        IsHitTestVisible="False"
+        Focusable="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        FontFamily="Segoe UI">
+
+    <Border Padding="24,18" CornerRadius="14"
+            Background="{StaticResource BgBrush}"
+            BorderBrush="{StaticResource BorderStrongBrush}"
+            BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="5" Opacity="0.5"/>
+        </Border.Effect>
+
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Grid Width="26" Height="26">
+                <Ellipse Width="26" Height="26" StrokeThickness="3"
+                         Stroke="{StaticResource BorderBrush}"/>
+                <Ellipse Width="26" Height="26" StrokeThickness="3"
+                         Stroke="{StaticResource AccentBrush}"
+                         StrokeDashArray="20 100" StrokeDashCap="Round"
+                         RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform x:Name="Rot"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+            </Grid>
+            <TextBlock Text="Translating…" Foreground="{StaticResource TextBrush}"
+                       FontSize="14" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="14,0,2,0"/>
+        </StackPanel>
+    </Border>
+
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="Rot"
+                                     Storyboard.TargetProperty="Angle"
+                                     From="0" To="360" Duration="0:0:0.85"
+                                     RepeatBehavior="Forever"/>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
+</Window>

@@ -85,14 +85,16 @@ public sealed class OcrService
             foreach (var lang in OcrEngine.AvailableRecognizerLanguages)
                 Add(OcrEngine.TryCreateFromLanguage(lang));
 
-            var all = new List<OcrBlock>();
-            foreach (var engine in engines)
+            // Run the recognizers concurrently. Each pass over the (upscaled) bitmap is
+            // independent and read-only, so wall-time is the slowest engine, not their sum.
+            var perEngine = await Task.WhenAll(engines.Select(async engine =>
             {
                 var es = ScriptOfTag(engine.RecognizerLanguage?.LanguageTag);
-                foreach (var b in await RunAsync(engine, softwareBitmap, scale))
-                    if (IsAppropriate(b.OriginalText, es))
-                        all.Add(b);
-            }
+                var blocks = await RunAsync(engine, softwareBitmap, scale);
+                return blocks.Where(b => IsAppropriate(b.OriginalText, es));
+            }));
+
+            var all = perEngine.SelectMany(b => b).ToList();
             return MergeLineFragments(DedupOverlaps(all));
         }
         finally
