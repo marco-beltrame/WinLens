@@ -24,7 +24,7 @@ A desktop take on Google Lens translate.
 </div>
 
 <div align="center">
-<img src="assets/demo.png" alt="WinLens translating a Chinese notice into English, in place" width="820"/>
+<img src="assets/demo.gif" alt="WinLens translating a Chinese notice into English, in place" width="820"/>
 <br/>
 <sub>A Chinese notice opened on the desktop, translated in place. No browser, no copy-paste.</sub>
 </div>
@@ -146,7 +146,7 @@ The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
 - [ ] Region capture: translate a selected area instead of the whole screen.
-- [ ] Animated demo (GIF) in the README.
+- [x] Animated demo (GIF) in the README.
 
 ## Building from source
 
