@@ -23,6 +23,10 @@ A desktop take on Google Lens translate.
 
 </div>
 
+<div align="center">
+<img src="assets/demo.png" alt="WinLens translating a multilingual notice board to English in place" width="860"/>
+</div>
+
 ## Overview
 
 WinLens translates the text on your screen and draws the translation right over the original,
