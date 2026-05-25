@@ -78,6 +78,14 @@ choose the OCR source language, and toggle launch-at-startup.
 2. Download the latest `WinLens.exe`.
 3. Run it. WinLens needs the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), which most Windows 10/11 machines already have.
 
+The executable isn't code-signed yet, so on first launch Windows SmartScreen may show
+"Windows protected your PC". Click **More info > Run anyway**. If you'd rather verify the
+download instead, compare its checksum against the SHA256 listed on the release page:
+
+```powershell
+Get-FileHash .\WinLens.exe -Algorithm SHA256
+```
+
 ### OCR language packs
 
 WinLens uses the Windows OCR engine, so it can only read languages whose OCR pack is installed.
