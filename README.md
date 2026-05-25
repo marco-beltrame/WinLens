@@ -50,14 +50,13 @@ translation, press <kbd>Esc</kbd> to dismiss it.
 - Right-click a block to copy the original text or the translation.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
-## Demo
+## Control panel
+
+A small tray app with a dark control panel. Pick the target language, set the hotkey,
+choose the OCR source language, and toggle launch-at-startup.
 
 <div align="center">
-<table>
-<tr>
-<td align="center"><b>Control panel</b><br/><img src="assets/settings.png" alt="Settings window" width="260"/></td>
-</tr>
-</table>
+<img src="assets/settings.png" alt="WinLens control panel" width="330"/>
 </div>
 
 ## Installation
