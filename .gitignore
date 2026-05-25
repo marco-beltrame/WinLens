@@ -13,4 +13,5 @@ obj/
 
 ## Local scratch (screenshots, test pages, logs)
 assets/_*
+assets/*.pdf
 *.log
