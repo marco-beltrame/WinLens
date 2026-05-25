@@ -23,6 +23,12 @@ A desktop take on Google Lens translate.
 
 </div>
 
+<div align="center">
+<img src="assets/demo.png" alt="WinLens translating a Chinese notice into English, in place" width="820"/>
+<br/>
+<sub>A Chinese notice opened on the desktop, translated in place. No browser, no copy-paste.</sub>
+</div>
+
 ## Overview
 
 WinLens translates the text on your screen and draws the translation right over the original,
