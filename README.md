@@ -39,6 +39,20 @@ text doesn't need to be selectable.
 It sits in the system tray and is triggered by a global hotkey. Press the hotkey, read the
 translation, press <kbd>Esc</kbd> to dismiss it.
 
+## Why WinLens?
+
+Browser extensions translate text *inside a web page*. They can't read anything else on your
+screen. WinLens runs OCR on the actual pixels, so it translates things they can't:
+
+- **Text inside images:** photos, screenshots, memes, infographics, scanned documents.
+- **Games:** menus and dialogue, including imported titles.
+- **Desktop apps:** installers, error dialogs, foreign software UIs.
+- **PDFs and documents** in any reader.
+- **Video frames and subtitles.**
+- **Anything you can't select or copy.**
+
+If a browser tab already translates it, you don't need WinLens. For everything else on screen, you do.
+
 ## Features
 
 - Translates on-screen text in place: the translation replaces the original, with a matching background and font, instead of appearing in a separate box.
