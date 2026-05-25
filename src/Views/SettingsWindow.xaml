@@ -31,16 +31,8 @@
             <Grid x:Name="TitleBar" Grid.Row="0" Height="48" Background="Transparent"
                   MouseLeftButtonDown="OnTitleBarDrag">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-                    <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource AccentGradient}">
-                        <Viewbox Width="16" Height="16">
-                            <Canvas Width="24" Height="24">
-                                <Ellipse Canvas.Left="3" Canvas.Top="3" Width="13" Height="13"
-                                         Stroke="White" StrokeThickness="2.2"/>
-                                <Line X1="14" Y1="14" X2="21" Y2="21" Stroke="White" StrokeThickness="2.2"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Border>
+                    <Image Width="28" Height="28" Source="/assets/logo.png"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
                     <TextBlock Text="WinLens" Foreground="{StaticResource TextBrush}"
                                FontSize="14" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="10,0,0,0"/>

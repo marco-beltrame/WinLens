@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Resource Include="assets\winlens.ico" />
+    <Resource Include="assets\logo.png" />
   </ItemGroup>
 
 </Project>
