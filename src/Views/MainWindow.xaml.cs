@@ -115,6 +115,7 @@ public partial class MainWindow : Window, IDisposable
             if (blocks.Count == 0)
             {
                 capture.Bitmap.Dispose();
+                MemoryHygiene.Trim();
                 return;
             }
 

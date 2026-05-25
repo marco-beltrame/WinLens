@@ -65,7 +65,11 @@ public partial class OverlayWindow : Window
 
         KeyDown += OnKeyDown;
         OverlayCanvas.MouseLeftButtonDown += (_, _) => Close();
-        Closed += (_, _) => _screenshot.Dispose();
+        Closed += (_, _) =>
+        {
+            _screenshot.Dispose();
+            MemoryHygiene.Trim(); // reclaim the cycle's large OCR buffers
+        };
         Loaded += (_, _) =>
         {
             BuildOverlayBoxes();

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Runtime.Versioning;
 using System.Text;
@@ -13,7 +13,6 @@ using System.Windows;
 using Windows.Globalization;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
-using Windows.Storage.Streams;
 using WinLens.Models;
 
 namespace WinLens.Services;
@@ -56,7 +55,7 @@ public sealed class OcrService
 
         try
         {
-            using var softwareBitmap = await ToSoftwareBitmapAsync(source);
+            using var softwareBitmap = ToSoftwareBitmap(source);
 
             // Explicit source language → use only that recognizer.
             if (!string.IsNullOrWhiteSpace(sourceLang) &&
@@ -282,17 +281,39 @@ public sealed class OcrService
         return smaller <= 0 ? 0 : inter / smaller;
     }
 
-    private static async Task<SoftwareBitmap> ToSoftwareBitmapAsync(Bitmap bitmap)
+    /// <summary>
+    /// Convert a GDI bitmap straight into a SoftwareBitmap by copying its pixels once.
+    /// The previous path went bitmap → BMP encode → byte[] → IBuffer → decode, i.e. four
+    /// extra full-frame copies that, on an upscaled multi-monitor screenshot, each ran to
+    /// tens of MB and landed on the Large Object Heap. A 32bpp GDI bitmap is already BGRA
+    /// with a tight (w*4) stride, so we lock it and hand the bytes to the SoftwareBitmap.
+    /// </summary>
+    private static SoftwareBitmap ToSoftwareBitmap(Bitmap bitmap)
     {
-        using var ms = new MemoryStream();
-        bitmap.Save(ms, ImageFormat.Bmp);
-        ms.Position = 0;
+        int w = bitmap.Width, h = bitmap.Height;
+        var rect = new Rectangle(0, 0, w, h);
+        var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            int rowBytes = w * 4;
+            var buffer = new byte[rowBytes * h];
+            if (data.Stride == rowBytes)
+            {
+                Marshal.Copy(data.Scan0, buffer, 0, buffer.Length);
+            }
+            else
+            {
+                for (int y = 0; y < h; y++)
+                    Marshal.Copy(data.Scan0 + y * data.Stride, buffer, y * rowBytes, rowBytes);
+            }
 
-        using var ras = new InMemoryRandomAccessStream();
-        await ras.WriteAsync(ms.ToArray().AsBuffer());
-        ras.Seek(0);
-
-        var decoder = await BitmapDecoder.CreateAsync(ras);
-        return await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            var sb = new SoftwareBitmap(BitmapPixelFormat.Bgra8, w, h, BitmapAlphaMode.Premultiplied);
+            sb.CopyFromBuffer(buffer.AsBuffer());
+            return sb;
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 }

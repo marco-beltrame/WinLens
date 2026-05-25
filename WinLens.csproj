@@ -12,6 +12,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\winlens.ico</ApplicationIcon>
     <LangVersion>latest</LangVersion>
+    <!-- Workstation GC keeps the footprint small for a tray app; server GC would grow a
+         heap per core. RetainVMGarbageCollection=false returns freed segments to the OS. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
