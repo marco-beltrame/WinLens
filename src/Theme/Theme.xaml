@@ -296,4 +296,53 @@
         </Setter>
     </Style>
 
+    <!-- ====================== Context menu (overlay) ====================== -->
+    <Style x:Key="ModernMenuItem" TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Bg" CornerRadius="7" Background="Transparent" Padding="11,8" Margin="0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Grid.Column="0" ContentSource="Icon"
+                                              VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                              VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bg" Property="Background" Value="{StaticResource SurfaceHoverBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ModernContextMenu" TargetType="ContextMenu">
+        <Setter Property="ItemContainerStyle" Value="{StaticResource ModernMenuItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{StaticResource BgBrush}"
+                            BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="4">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="20" ShadowDepth="4" Opacity="0.5"/>
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

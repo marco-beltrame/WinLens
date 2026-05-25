@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.Globalization;
@@ -78,7 +78,7 @@ public partial class OverlayWindow : Window
             _textBoxes.Clear();
             _screenshot.Dispose();
 
-            // Reclaim only once the window is actually torn down and dereferenced — running
+            // Reclaim only once the window is actually torn down and dereferenced â€” running
             // the compaction here (still inside Closed) would find everything still rooted.
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MemoryHygiene.Trim));
         };
@@ -135,7 +135,7 @@ public partial class OverlayWindow : Window
         {
             var (bg, fg) = SampleColors(_screenshot, block.BoundingRect);
 
-            // Convert pixel rect → DIPs.
+            // Convert pixel rect â†’ DIPs.
             double dipX = block.BoundingRect.X      * _pixelToDip;
             double dipY = block.BoundingRect.Y      * _pixelToDip;
             double dipW = block.BoundingRect.Width  * _pixelToDip;
@@ -179,7 +179,7 @@ public partial class OverlayWindow : Window
                 Padding = new Thickness(0),
                 Margin = new Thickness(0),
                 CaretBrush = new SolidColorBrush(fg),
-                SelectionBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                SelectionBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x7B, 0x6C, 0xF6)),
                 Cursor = Cursors.IBeam,
                 ContextMenu = BuildContextMenu(block),
                 Width  = dipW,
@@ -279,7 +279,8 @@ public partial class OverlayWindow : Window
 
     private ContextMenu BuildContextMenu(OcrBlock block)
     {
-        var menu = new ContextMenu();
+        var menu = new ContextMenu { Style = (Style)FindResource("ModernContextMenu") };
+
         var copyOriginal = new MenuItem { Header = "Copy original" };
         copyOriginal.Click += (_, _) =>
         {
