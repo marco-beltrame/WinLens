@@ -7,6 +7,8 @@
 **Translate any text on your Windows screen, in place.**
 A desktop take on Google Lens translate.
 
+English · [简体中文](README.zh-CN.md)
+
 [Explore the docs »](#usage)
 
 [Report Bug](https://github.com/marco-beltrame/WinLens/issues/new?template=bug_report.yml) ·
