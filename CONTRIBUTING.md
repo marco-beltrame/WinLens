@@ -16,7 +16,7 @@ label.
 ## Development setup
 
 Requirements: Windows 10 (build 19041 or later) / 11, the
-[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) with the Windows Desktop workload.
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) with the Windows Desktop workload.
 
 ```bash
 git clone https://github.com/marco-beltrame/WinLens.git

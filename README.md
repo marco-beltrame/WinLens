@@ -82,7 +82,7 @@ choose the OCR source language, and toggle launch-at-startup.
 
 1. Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page.
 2. Download the latest `WinLens.exe`.
-3. Run it. WinLens needs the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), which most Windows 10/11 machines already have.
+3. Run it. WinLens needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), which most Windows 10/11 machines already have.
 
 The executable isn't code-signed yet, so on first launch Windows SmartScreen may show
 "Windows protected your PC". Click **More info > Run anyway**. If you'd rather verify the
@@ -158,7 +158,7 @@ dotnet run
 ```
 
 Requirements: Windows 10 (build 19041 or later) / 11, the
-[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), and the Windows Desktop
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), and the Windows Desktop
 workload (WPF).
 
 | Flag | Effect |
@@ -181,4 +181,4 @@ MIT. See [LICENSE](LICENSE).
 
 - Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
 - Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
-- Built with .NET 8 and WPF.
+- Built with .NET 10 and WPF.
