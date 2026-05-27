@@ -146,7 +146,7 @@ The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
 - [ ] Region capture: translate a selected area instead of the whole screen.
-- [ ] Animated demo (GIF) in the README.
+- [x] Animated demo (GIF) in the README.
 
 ## Building from source
 
