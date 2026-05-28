@@ -7,6 +7,8 @@
 **Translate any text on your Windows screen, in place.**
 A desktop take on Google Lens translate.
 
+English · [简体中文](README.zh-CN.md)
+
 [Explore the docs »](#usage)
 
 [Report Bug](https://github.com/marco-beltrame/WinLens/issues/new?template=bug_report.yml) ·
@@ -144,7 +146,7 @@ The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
 - [ ] Region capture: translate a selected area instead of the whole screen.
-- [ ] Animated demo (GIF) in the README.
+- [x] Animated demo (GIF) in the README.
 
 ## Building from source
 
