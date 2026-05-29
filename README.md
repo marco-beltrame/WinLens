@@ -87,10 +87,12 @@ flavours are offered:
 | Download | Size | Needs a runtime? |
 | --- | --- | --- |
 | `WinLens-win-x64.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| `WinLens-win-x64-standalone.exe` | ~75 MB | No — everything is bundled, just run it |
+| `WinLens-win-x64-standalone.zip` | ~75 MB | No — the runtime is bundled |
 
-Pick the small one if you already have (or don't mind installing) the .NET 10 Desktop Runtime;
-pick the standalone one if you want a single file that runs with no install.
+Pick the small `.exe` if you already have (or don't mind installing) the .NET 10 Desktop
+Runtime. Pick the standalone `.zip` if you want it to run with no install — extract the folder
+anywhere and run `WinLens.exe` inside (keep the files together; the `.exe` needs the DLLs
+next to it).
 
 The executable isn't code-signed yet, so on first launch Windows SmartScreen may show
 "Windows protected your PC". Click **More info > Run anyway**. If you'd rather verify the

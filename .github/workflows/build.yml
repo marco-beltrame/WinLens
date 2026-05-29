@@ -40,13 +40,16 @@ jobs:
       - name: Publish (framework-dependent)
         run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish-fd
 
-      # Self-contained: larger (~75 MB) but runs with no runtime install.
+      # Self-contained: no runtime install needed. NOT single-file — WPF's native
+      # DLLs (PresentationNative, wpfgfx, D3DCompiler, ...) can't be embedded in a
+      # single-file bundle and a bare exe crashes with DllNotFoundException (badly
+      # on ARM64). So we publish a normal folder and ship it as a zip.
       - name: Publish (self-contained)
-        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o publish-sc
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained true -o publish-sc
 
-      - name: Rename self-contained artifact
+      - name: Zip self-contained build
         shell: pwsh
-        run: Rename-Item publish-sc/WinLens.exe "WinLens-${{ matrix.rid }}-standalone.exe"
+        run: Compress-Archive -Path publish-sc/* -DestinationPath "WinLens-${{ matrix.rid }}-standalone.zip"
 
       - name: Upload framework-dependent artifact
         uses: actions/upload-artifact@v4
@@ -58,4 +61,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: WinLens-${{ matrix.rid }}-standalone
-          path: publish-sc/WinLens-${{ matrix.rid }}-standalone.exe
+          path: WinLens-${{ matrix.rid }}-standalone.zip

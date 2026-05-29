@@ -79,9 +79,10 @@ WinLens 翻译屏幕上的文字，并将译文直接覆盖在原文之上，自
 | 下载 | 大小 | 需要运行时？ |
 | --- | --- | --- |
 | `WinLens-win-x64.exe` | 约 25 MB | 需要 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| `WinLens-win-x64-standalone.exe` | 约 75 MB | 不需要——已打包全部依赖，直接运行 |
+| `WinLens-win-x64-standalone.zip` | 约 75 MB | 不需要——已打包运行时 |
 
-已安装（或不介意安装）.NET 10 桌面运行时就选小的；想要单文件、免安装就选 standalone 版。
+已安装（或不介意安装）.NET 10 桌面运行时就选小的 `.exe`。想免安装就选 standalone 的 `.zip`：
+解压到任意位置，运行里面的 `WinLens.exe` 即可（请保持文件夹内文件在一起，`.exe` 需要同目录的 DLL）。
 
 > GitHub 在国内下载可能较慢，如有需要可后续提供 Gitee 镜像。
 
