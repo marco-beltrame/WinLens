@@ -9,7 +9,17 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: build (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+          - rid: win-arm64
+            runner: windows-11-arm
 
     steps:
       - name: Checkout
@@ -21,16 +31,16 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore -r ${{ matrix.rid }}
 
       - name: Build (Release)
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -r ${{ matrix.rid }}
 
-      - name: Publish (win-x64, single file)
-        run: dotnet publish WinLens.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish
+      - name: Publish (${{ matrix.rid }}, single file)
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WinLens-win-x64
+          name: WinLens-${{ matrix.rid }}
           path: publish/WinLens.exe
