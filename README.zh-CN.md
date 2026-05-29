@@ -73,16 +73,22 @@ WinLens 翻译屏幕上的文字，并将译文直接覆盖在原文之上，自
 
 ### 下载
 
-1. 打开 [Releases](https://github.com/marco-beltrame/WinLens/releases) 页面。
-2. 下载最新的 `WinLens.exe`。
-3. 运行它。WinLens 需要 [.NET 8 桌面运行时](https://dotnet.microsoft.com/download/dotnet/8.0)，大多数 Windows 10/11 设备已自带。
+打开 [Releases](https://github.com/marco-beltrame/WinLens/releases) 页面，选择适合你 CPU 的版本
+（大多数 PC 用 `win-x64`，Snapdragon / ARM 设备用 `win-arm64`）。提供两种版本：
+
+| 下载 | 大小 | 需要运行时？ |
+| --- | --- | --- |
+| `WinLens-win-x64.exe` | 约 25 MB | 需要 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `WinLens-win-x64-standalone.exe` | 约 75 MB | 不需要——已打包全部依赖，直接运行 |
+
+已安装（或不介意安装）.NET 10 桌面运行时就选小的；想要单文件、免安装就选 standalone 版。
 
 > GitHub 在国内下载可能较慢，如有需要可后续提供 Gitee 镜像。
 
 该可执行文件尚未代码签名，因此首次运行时 Windows SmartScreen 可能提示「Windows 已保护你的电脑」。点击 **更多信息 > 仍要运行**。如果你想先校验下载文件，可将其 SHA256 与发布页列出的值对比：
 
 ```powershell
-Get-FileHash .\WinLens.exe -Algorithm SHA256
+Get-FileHash .\WinLens-win-x64.exe -Algorithm SHA256
 ```
 
 ### OCR 语言包
@@ -147,7 +153,7 @@ dotnet build -c Release
 dotnet run
 ```
 
-环境要求：Windows 10（build 19041 或更高）/ 11、[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)，以及 Windows 桌面工作负载（WPF）。
+环境要求：Windows 10（build 19041 或更高）/ 11、[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)，以及 Windows 桌面工作负载（WPF）。
 
 | 参数 | 作用 |
 | --- | --- |
@@ -169,4 +175,4 @@ MIT。见 [LICENSE](LICENSE)。
 
 - 翻译通过 Google Translate 接口完成，[MyMemory](https://mymemory.translated.net/) 作为兜底。
 - 托盘集成使用 [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)。
-- 基于 .NET 8 与 WPF 构建。
+- 基于 .NET 10 与 WPF 构建。

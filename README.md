@@ -80,16 +80,24 @@ choose the OCR source language, and toggle launch-at-startup.
 
 ### Download
 
-1. Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page.
-2. Download the latest `WinLens.exe`.
-3. Run it. WinLens needs the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), which most Windows 10/11 machines already have.
+Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page and pick the
+build for your CPU (`win-x64` for most PCs, `win-arm64` for Snapdragon / ARM devices). Two
+flavours are offered:
+
+| Download | Size | Needs a runtime? |
+| --- | --- | --- |
+| `WinLens-win-x64.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `WinLens-win-x64-standalone.exe` | ~75 MB | No — everything is bundled, just run it |
+
+Pick the small one if you already have (or don't mind installing) the .NET 10 Desktop Runtime;
+pick the standalone one if you want a single file that runs with no install.
 
 The executable isn't code-signed yet, so on first launch Windows SmartScreen may show
 "Windows protected your PC". Click **More info > Run anyway**. If you'd rather verify the
 download instead, compare its checksum against the SHA256 listed on the release page:
 
 ```powershell
-Get-FileHash .\WinLens.exe -Algorithm SHA256
+Get-FileHash .\WinLens-win-x64.exe -Algorithm SHA256
 ```
 
 ### OCR language packs
@@ -158,7 +166,7 @@ dotnet run
 ```
 
 Requirements: Windows 10 (build 19041 or later) / 11, the
-[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), and the Windows Desktop
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), and the Windows Desktop
 workload (WPF).
 
 | Flag | Effect |
@@ -181,4 +189,4 @@ MIT. See [LICENSE](LICENSE).
 
 - Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
 - Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
-- Built with .NET 8 and WPF.
+- Built with .NET 10 and WPF.

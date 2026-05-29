@@ -25,10 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore
         run: dotnet restore -r ${{ matrix.rid }}
@@ -36,11 +36,26 @@ jobs:
       - name: Build (Release)
         run: dotnet build --configuration Release --no-restore -r ${{ matrix.rid }}
 
-      - name: Publish (${{ matrix.rid }}, single file)
-        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish
+      # Framework-dependent: small (~25 MB) but needs the .NET 10 Desktop Runtime.
+      - name: Publish (framework-dependent)
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish-fd
 
-      - name: Upload artifact
+      # Self-contained: larger (~75 MB) but runs with no runtime install.
+      - name: Publish (self-contained)
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o publish-sc
+
+      - name: Rename self-contained artifact
+        shell: pwsh
+        run: Rename-Item publish-sc/WinLens.exe "WinLens-${{ matrix.rid }}-standalone.exe"
+
+      - name: Upload framework-dependent artifact
         uses: actions/upload-artifact@v4
         with:
           name: WinLens-${{ matrix.rid }}
-          path: publish/WinLens.exe
+          path: publish-fd/WinLens.exe
+
+      - name: Upload self-contained artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinLens-${{ matrix.rid }}-standalone
+          path: publish-sc/WinLens-${{ matrix.rid }}-standalone.exe
