@@ -21,6 +21,7 @@ public partial class MainWindow : Window, IDisposable
     {
         InitializeComponent();
         _settings.Load();
+        _translator.Configure(_settings.Current);
         Loaded += OnLoaded;
     }
 

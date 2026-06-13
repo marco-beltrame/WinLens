@@ -65,16 +65,31 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
 - Dark control panel. You can change the target language straight from the overlay.
 - Right-click a block to copy the original text or the translation.
+- Optional OpenAI-compatible API engine (OpenAI, DeepSeek, Ollama, …) for higher-quality, context-aware translation. Off by default; the free built-in engine stays the fallback.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
 ## Control panel
 
 A small tray app with a dark control panel. Pick the target language, set the hotkey,
-choose the OCR source language, and toggle launch-at-startup.
+choose the OCR source language, pick the translation engine, and toggle launch-at-startup.
 
 <div align="center">
 <img src="assets/settings.png" alt="WinLens control panel" width="330"/>
 </div>
+
+### Translation engine
+
+WinLens translates with the free built-in engine (Google, MyMemory fallback) out of the box —
+no setup, no key. If you want higher-quality, context-aware translation, pick **OpenAI-compatible
+API** under *Translation engine* and fill in:
+
+- **API base URL** — e.g. `https://api.openai.com/v1`, `https://api.deepseek.com/v1`, or a local `http://localhost:11434/v1` (Ollama).
+- **API key** — your bearer token.
+- **Model** — e.g. `gpt-4o-mini`, `deepseek-chat`.
+
+The key is stored locally in `%APPDATA%\WinLens\settings.json` and sent only to the endpoint you
+configure. If a request fails (bad key, no network, rate limit), WinLens falls back to the
+built-in engine so text is never left untranslated.
 
 ## Installation
 
@@ -144,7 +159,7 @@ Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in pl
 2. Upscale the image about 2x so small UI text is recognized more reliably.
 3. Run every installed OCR recognizer and keep from each only the blocks whose script matches
    it (Latin from the Latin engine, CJK from the CJK engine), then drop overlapping duplicates.
-4. Translate each line (Google endpoint, with a MyMemory fallback), cached per session.
+4. Translate each line, cached per session. By default the free built-in engine is used (Google endpoint, with a MyMemory fallback). If an OpenAI-compatible API is configured in the control panel, it is tried first and the built-in engine becomes the fallback.
 5. Draw an opaque, color- and font-matched box over each original line.
 
 ## Roadmap

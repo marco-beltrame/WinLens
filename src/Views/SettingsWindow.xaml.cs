@@ -39,6 +39,7 @@ public partial class SettingsWindow : Window
 
         RebuildLanguageOptions();
         BuildSourceOptions();
+        FillEngineFields();
 
         StartupToggle.IsChecked = StartupRegistration.IsEnabled();
         UpdateHotkeyText();
@@ -117,6 +118,52 @@ public partial class SettingsWindow : Window
         if (_suppressEvents) return;
         if (SourceCombo.SelectedItem is not LanguageOption opt) return;
         _settings.Current.SourceLanguage = opt.Code;
+        _settings.Save(_settings.Current);
+    }
+
+    // ---------------- Translation engine ----------------
+
+    private void FillEngineFields()
+    {
+        var provider = _settings.Current.TranslationProvider;
+        foreach (var item in EngineCombo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string tag &&
+                Enum.TryParse<TranslationProvider>(tag, out var p) && p == provider)
+            {
+                EngineCombo.SelectedItem = item;
+                break;
+            }
+        }
+
+        LlmBaseUrlBox.Text = _settings.Current.LlmBaseUrl;
+        LlmApiKeyBox.Text  = _settings.Current.LlmApiKey;
+        LlmModelBox.Text   = _settings.Current.LlmModel;
+        UpdateLlmPanelVisibility();
+    }
+
+    private void UpdateLlmPanelVisibility() =>
+        LlmPanel.Visibility =
+            _settings.Current.TranslationProvider == TranslationProvider.OpenAiCompatible
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+    private void OnEngineChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        if (EngineCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag) return;
+        if (!Enum.TryParse<TranslationProvider>(tag, out var provider)) return;
+        _settings.Current.TranslationProvider = provider;
+        _settings.Save(_settings.Current);
+        UpdateLlmPanelVisibility();
+    }
+
+    private void OnLlmConfigChanged(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _settings.Current.LlmBaseUrl = LlmBaseUrlBox.Text.Trim();
+        _settings.Current.LlmApiKey  = LlmApiKeyBox.Text.Trim();
+        _settings.Current.LlmModel   = LlmModelBox.Text.Trim();
         _settings.Save(_settings.Current);
     }
 

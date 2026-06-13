@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="WinLens"
         Icon="/assets/winlens.ico"
-        Width="440" Height="694"
+        Width="440" SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -81,6 +81,29 @@
                            Foreground="{StaticResource AccentBrush}" FontSize="12" FontWeight="SemiBold"
                            Text="+ Add OCR languages in Windows…"
                            MouseLeftButtonUp="OnAddLanguages"/>
+
+                <!-- Translation engine -->
+                <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
+                <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
+                          SelectionChanged="OnEngineChanged">
+                    <ComboBoxItem Tag="BuiltIn" Content="Built-in (Google · free)"/>
+                    <ComboBoxItem Tag="OpenAiCompatible" Content="OpenAI-compatible API"/>
+                </ComboBox>
+
+                <!-- OpenAI-compatible API settings (shown only for that engine) -->
+                <StackPanel x:Name="LlmPanel" Visibility="Collapsed">
+                    <TextBlock Text="API BASE URL" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
+                    <TextBox x:Name="LlmBaseUrlBox" Style="{StaticResource ModernTextBox}"
+                             TextChanged="OnLlmConfigChanged"/>
+                    <TextBlock Text="API KEY" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
+                    <TextBox x:Name="LlmApiKeyBox" Style="{StaticResource ModernTextBox}"
+                             TextChanged="OnLlmConfigChanged"/>
+                    <TextBlock Text="MODEL" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
+                    <TextBox x:Name="LlmModelBox" Style="{StaticResource ModernTextBox}"
+                             TextChanged="OnLlmConfigChanged"/>
+                    <TextBlock Style="{StaticResource CaptionText}" Margin="2,8,0,0" TextWrapping="Wrap"
+                               Text="Works with any OpenAI-compatible chat endpoint (OpenAI, DeepSeek, Ollama, …). Falls back to the built-in engine if a request fails."/>
+                </StackPanel>
 
                 <!-- Shortcut -->
                 <TextBlock Text="SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
