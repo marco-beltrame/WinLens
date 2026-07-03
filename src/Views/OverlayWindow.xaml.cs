@@ -11,6 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinLens.Models;
@@ -28,12 +29,19 @@ public partial class OverlayWindow : Window
     private readonly TranslationService _translator;
     private readonly Action<string> _onTargetLangChanged;
     private readonly IReadOnlyList<string> _recentTargets;
-    private readonly double _pixelToDip;
+    private double _pixelToDip;
 
     private readonly Dictionary<OcrBlock, TextBox> _textBoxes = new();
     private string _currentTarget;
+    private bool _suppressLangEvents;
 
     [DllImport("user32.dll")] private static extern uint GetDpiForSystem();
+
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int x, int y, int cx, int cy, uint flags);
 
     public OverlayWindow(
         DBitmap screenshot,
@@ -57,11 +65,24 @@ public partial class OverlayWindow : Window
         if (dpi == 0) dpi = 96;
         _pixelToDip = 96.0 / dpi;
 
-        // Position + size window in DIPs to cover the virtual screen.
+        // Initial DIP placement (decides which monitor WPF associates the window with).
         Left   = virtualBounds.X      * _pixelToDip;
         Top    = virtualBounds.Y      * _pixelToDip;
         Width  = virtualBounds.Width  * _pixelToDip;
         Height = virtualBounds.Height * _pixelToDip;
+
+        // The DIP math above uses the SYSTEM dpi, which on a mixed-DPI multi-monitor
+        // setup is only correct for the primary monitor. Once the HWND exists, pin the
+        // window to the virtual screen in PHYSICAL pixels so it covers every monitor
+        // exactly; the px→DIP factor is then re-read from the window's actual DPI in
+        // Loaded (before the text boxes are laid out).
+        SourceInitialized += (_, _) =>
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            SetWindowPos(hwnd, IntPtr.Zero,
+                _virtualBounds.X, _virtualBounds.Y, _virtualBounds.Width, _virtualBounds.Height,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+        };
 
         BackgroundImage.Source = ToBitmapSource(screenshot);
 
@@ -84,6 +105,12 @@ public partial class OverlayWindow : Window
         };
         Loaded += (_, _) =>
         {
+            // WPF lays the (monitor-spanning) window out with one DPI; use that exact
+            // value so box coordinates land on the right physical pixels.
+            var actual = VisualTreeHelper.GetDpi(this);
+            if (actual.DpiScaleX > 0)
+                _pixelToDip = 1.0 / actual.DpiScaleX;
+
             BuildOverlayBoxes();
             BeginAnimation(OpacityProperty,
                 new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(150))));
@@ -94,14 +121,27 @@ public partial class OverlayWindow : Window
 
     private void PopulateLanguages()
     {
-        var itemStyle = (Style)FindResource("ModernComboBoxItem");
-        LanguagePicker.Populate(LanguageBox, itemStyle, _currentTarget, _recentTargets);
-        if (LanguageBox.SelectedIndex < 0)
-            LanguageBox.SelectedIndex = 0;
+        // Populate sets SelectedItem, which fires SelectionChanged. Without suppression
+        // a saved target that's missing from LanguageList would make the fallback
+        // selection (first item) look like a user choice: it would overwrite the saved
+        // TargetLanguage and retranslate everything to the wrong language.
+        _suppressLangEvents = true;
+        try
+        {
+            var itemStyle = (Style)FindResource("ModernComboBoxItem");
+            LanguagePicker.Populate(LanguageBox, itemStyle, _currentTarget, _recentTargets);
+            if (LanguageBox.SelectedIndex < 0)
+                LanguageBox.SelectedIndex = 0;
+        }
+        finally
+        {
+            _suppressLangEvents = false;
+        }
     }
 
     private async void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressLangEvents) return;
         if (LanguageBox.SelectedItem is not ComboBoxItem item) return;
         var newTarget = item.Tag as string;
         if (string.IsNullOrEmpty(newTarget) ||

@@ -21,9 +21,13 @@ namespace WinLens.Services;
 public sealed class OcrService
 {
     // Upscaling the screenshot before OCR markedly improves accuracy on small,
-    // anti-aliased UI text (chat bubbles etc.). Capped so we don't blow up memory.
+    // anti-aliased UI text (chat bubbles etc.). Capped so we don't blow up memory:
+    // a per-side limit AND a total-area limit, because on a large or high-DPI
+    // multi-monitor desktop a 2x upscale can otherwise allocate hundreds of MB per
+    // copy (and the conversion holds two copies at once).
     private const double TargetScale = 2.0;
     private const int MaxDimension = 8000;
+    private const long MaxPixels = 40_000_000; // ~40 MP upscaled (~160 MB per 32bpp copy)
 
     /// <summary>
     /// OCR recognizer languages installed on this machine (tag + display name).
@@ -50,13 +54,23 @@ public sealed class OcrService
     public async Task<List<OcrBlock>> RecognizeAsync(Bitmap bitmap, string? sourceLang = null)
     {
         double scale = ChooseScale(bitmap);
-        Bitmap? scaledOwned = scale == 1.0 ? null : Upscale(bitmap, scale);
-        var source = scaledOwned ?? bitmap;
+        Bitmap? scaledOwned = Math.Abs(scale - 1.0) < 0.001 ? null : Rescale(bitmap, scale);
 
+        // Convert to a SoftwareBitmap, then free the upscaled GDI bitmap immediately —
+        // before the (memory-heavy) recognizers run — so we never hold the scaled
+        // bitmap and the SoftwareBitmap alongside the OCR working set at the same time.
+        SoftwareBitmap softwareBitmap;
         try
         {
-            using var softwareBitmap = ToSoftwareBitmap(source);
+            softwareBitmap = ToSoftwareBitmap(scaledOwned ?? bitmap);
+        }
+        finally
+        {
+            scaledOwned?.Dispose();
+        }
 
+        using (softwareBitmap)
+        {
             // Explicit source language → use only that recognizer.
             if (!string.IsNullOrWhiteSpace(sourceLang) &&
                 !string.Equals(sourceLang, "auto", StringComparison.OrdinalIgnoreCase))
@@ -97,21 +111,22 @@ public sealed class OcrService
             var all = perEngine.SelectMany(b => b).ToList();
             return MergeLineFragments(DedupOverlaps(all));
         }
-        finally
-        {
-            scaledOwned?.Dispose();
-        }
     }
 
     private static double ChooseScale(Bitmap b)
     {
+        // Largest scale (≤ TargetScale) that keeps the image inside the per-side and
+        // total-area caps. This may drop BELOW 1.0: a very wide virtual desktop (e.g.
+        // three 4K monitors ≈ 11520 px) exceeds what Windows OCR accepts at native
+        // size, so oversized captures are downscaled rather than failing outright.
         double s = TargetScale;
-        while (s > 1.0 && (b.Width * s > MaxDimension || b.Height * s > MaxDimension))
-            s -= 0.5;
-        return s < 1.0 ? 1.0 : s;
+        s = Math.Min(s, (double)MaxDimension / b.Width);
+        s = Math.Min(s, (double)MaxDimension / b.Height);
+        s = Math.Min(s, Math.Sqrt((double)MaxPixels / ((double)b.Width * b.Height)));
+        return s;
     }
 
-    private static Bitmap Upscale(Bitmap src, double scale)
+    private static Bitmap Rescale(Bitmap src, double scale)
     {
         int w = (int)Math.Round(src.Width * scale);
         int h = (int)Math.Round(src.Height * scale);
@@ -284,11 +299,13 @@ public sealed class OcrService
     }
 
     /// <summary>
-    /// Convert a GDI bitmap straight into a SoftwareBitmap by copying its pixels once.
-    /// The previous path went bitmap → BMP encode → byte[] → IBuffer → decode, i.e. four
-    /// extra full-frame copies that, on an upscaled multi-monitor screenshot, each ran to
-    /// tens of MB and landed on the Large Object Heap. A 32bpp GDI bitmap is already BGRA
-    /// with a tight (w*4) stride, so we lock it and hand the bytes to the SoftwareBitmap.
+    /// Convert a GDI bitmap into a SoftwareBitmap by copying its pixels once into a
+    /// byte[] and handing that to the SoftwareBitmap. A 32bpp GDI bitmap is already
+    /// BGRA with a tight (w*4) stride, so the copy is a straight memcpy in the common
+    /// case. (An earlier attempt wrote directly into the SoftwareBitmap buffer via
+    /// IMemoryBufferByteAccess to drop this byte[]; that COM cast doesn't work under
+    /// CsWinRT and broke OCR, so we keep the simple, correct path. Peak memory is
+    /// instead bounded by the upscale caps in ChooseScale.)
     /// </summary>
     private static SoftwareBitmap ToSoftwareBitmap(Bitmap bitmap)
     {

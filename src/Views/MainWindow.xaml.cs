@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using Hardcodet.Wpf.TaskbarNotification;
 using WinLens.Native;
 using WinLens.Services;
 
@@ -14,6 +15,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly TranslationService _translator = new();
     private GlobalHotkey? _hotkey;
     private SettingsWindow? _settingsWindow;
+    private OverlayWindow? _overlay;
 
     private bool _busy;
 
@@ -28,6 +30,10 @@ public partial class MainWindow : Window, IDisposable
     {
         SetTrayIcon();
         RegisterHotkey();
+
+        // If the app moved since "launch at startup" was enabled, the Run entry points
+        // at a dead path; refresh it to the current executable.
+        StartupRegistration.RefreshPathIfEnabled();
 
         // First run: show the window so the app isn't an invisible tray icon.
         if (!_settings.LoadedFromDisk)
@@ -101,16 +107,29 @@ public partial class MainWindow : Window, IDisposable
         if (_busy) return;
         _busy = true;
         LoadingOverlay? loading = null;
+        System.Drawing.Bitmap? ownedBitmap = null;
+        bool restoreSettings = false;
         try
         {
+            // A still-open overlay must not end up in the new screenshot — we'd OCR our
+            // own translation. Close it and give it a beat to leave the screen.
+            if (_overlay != null)
+            {
+                _overlay.Close();
+                _overlay = null;
+                await Task.Delay(160);
+            }
+
             // Make sure our own settings window isn't captured in the screenshot.
             if (_settingsWindow is { IsVisible: true })
             {
+                restoreSettings = true;
                 _settingsWindow.Hide();
                 await Task.Delay(160);
             }
 
             var capture = ScreenCapture.CaptureVirtualScreen();
+            ownedBitmap = capture.Bitmap; // ours to dispose until the overlay takes it
 
             // Show the spinner only after the capture, so it isn't in the screenshot.
             loading = new LoadingOverlay();
@@ -119,8 +138,10 @@ public partial class MainWindow : Window, IDisposable
             var blocks = await _ocr.RecognizeAsync(capture.Bitmap, _settings.Current.SourceLanguage);
             if (blocks.Count == 0)
             {
-                capture.Bitmap.Dispose();
+                ownedBitmap.Dispose();
+                ownedBitmap = null;
                 MemoryHygiene.Trim();
+                Tray.ShowBalloonTip("WinLens", "No text found on screen.", BalloonIcon.Info);
                 return;
             }
 
@@ -144,9 +165,20 @@ public partial class MainWindow : Window, IDisposable
                     _settings.Save(_settings.Current);
                 },
                 recentTargets: _settings.Current.RecentLanguages);
+            ownedBitmap = null; // the overlay disposes the screenshot on Closed
+
+            bool bringSettingsBack = restoreSettings;
+            overlay.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_overlay, overlay))
+                    _overlay = null;
+                if (bringSettingsBack)
+                    _settingsWindow?.Show();
+            };
 
             loading.Close();
             loading = null;
+            _overlay = overlay;
             overlay.Show();
         }
         catch (Exception ex)
@@ -155,7 +187,10 @@ public partial class MainWindow : Window, IDisposable
         }
         finally
         {
+            ownedBitmap?.Dispose(); // reached only when the overlay never took ownership
             loading?.Close();
+            if (restoreSettings && _overlay == null)
+                _settingsWindow?.Show(); // no overlay took over (no text / error)
             _busy = false;
         }
     }

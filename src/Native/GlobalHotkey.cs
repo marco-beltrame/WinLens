@@ -66,6 +66,9 @@ public sealed class GlobalHotkey : IDisposable
         if (!RegisterHotKey(helper.Handle, HotkeyId, mods, vk))
         {
             int err = Marshal.GetLastWin32Error();
+            // Don't leave a dead hook on the shared HwndSource when registration fails.
+            _source.RemoveHook(WndProc);
+            _source = null;
             throw new InvalidOperationException(
                 $"RegisterHotKey failed (Win32 error {err}). The combination may already be in use.");
         }

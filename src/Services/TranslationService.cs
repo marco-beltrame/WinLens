@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using WinLens.Models;
 
 namespace WinLens.Services;
 
@@ -22,6 +23,11 @@ public sealed class TranslationService : IDisposable
     private readonly HttpClient _http;
     private readonly ConcurrentDictionary<(string text, string tgt), string> _cache = new();
     private readonly string _logPath;
+
+    // A full-screen capture can produce dozens of blocks; firing them all at the free
+    // endpoints at once invites 429s (which degrade silently to untranslated text).
+    private readonly SemaphoreSlim _gate = new(4);
+    private const int MaxCacheEntries = 2000;
 
     public TranslationService()
     {
@@ -44,27 +50,60 @@ public sealed class TranslationService : IDisposable
         if (string.IsNullOrWhiteSpace(text))
             return text;
 
-        var tgt = targetLang.Split('-')[0];
+        var tgt = NormalizeTarget(targetLang);
         var key = (text, tgt);
         if (_cache.TryGetValue(key, out var cached))
             return cached;
 
-        var google = await TryGoogleAsync(text, tgt, ct);
-        if (google != null)
+        await _gate.WaitAsync(ct);
+        try
         {
-            _cache[key] = google;
-            return google;
-        }
+            // Re-check: an identical block may have been translated while we waited.
+            if (_cache.TryGetValue(key, out cached))
+                return cached;
 
-        // MyMemory fallback — has no auto-detect, default source to English.
-        var memory = await TryMyMemoryAsync(text, "en", tgt, ct);
-        if (memory != null)
+            var google = await TryGoogleAsync(text, tgt, ct);
+            if (google != null)
+            {
+                Store(key, google);
+                return google;
+            }
+
+            // MyMemory fallback — has no auto-detect, default source to English.
+            var memory = await TryMyMemoryAsync(text, "en", tgt, ct);
+            if (memory != null)
+            {
+                Store(key, memory);
+                return memory;
+            }
+
+            return text;
+        }
+        finally
         {
-            _cache[key] = memory;
-            return memory;
+            _gate.Release();
         }
+    }
 
-        return text;
+    /// <summary>
+    /// Codes offered in <see cref="LanguageList"/> are passed through as-is — some carry a
+    /// region subtag the backend needs (e.g. "zh-TW" for Traditional Chinese; stripping it
+    /// would silently return Simplified). Anything else falls back to the base tag.
+    /// </summary>
+    private static string NormalizeTarget(string targetLang)
+    {
+        foreach (var (code, _) in LanguageList.Items)
+            if (string.Equals(code, targetLang, StringComparison.OrdinalIgnoreCase))
+                return code;
+        return targetLang.Split('-')[0];
+    }
+
+    private void Store((string text, string tgt) key, string value)
+    {
+        // Crude bound: the cache only needs to help within a session; reset when huge.
+        if (_cache.Count >= MaxCacheEntries)
+            _cache.Clear();
+        _cache[key] = value;
     }
 
     private async Task<string?> TryGoogleAsync(string text, string tgt, CancellationToken ct)
@@ -155,5 +194,9 @@ public sealed class TranslationService : IDisposable
         catch { /* logging must never throw */ }
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        _gate.Dispose();
+    }
 }

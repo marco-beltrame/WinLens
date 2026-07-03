@@ -43,4 +43,25 @@ public static class StartupRegistration
         }
         catch { /* access denied — ignore */ }
     }
+
+    /// <summary>
+    /// If autostart is enabled but the stored command points at a stale location
+    /// (app moved or updated), rewrite it to the currently running executable.
+    /// </summary>
+    public static void RefreshPathIfEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, true);
+            if (key?.GetValue(ValueName) is not string existing) return;
+
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+
+            var expected = $"\"{exe}\"";
+            if (!string.Equals(existing, expected, StringComparison.OrdinalIgnoreCase))
+                key.SetValue(ValueName, expected);
+        }
+        catch { /* best-effort */ }
+    }
 }
