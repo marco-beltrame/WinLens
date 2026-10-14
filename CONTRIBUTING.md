@@ -25,6 +25,7 @@ dotnet build -c Release
 dotnet run                 # run the app
 dotnet run -- --settings   # open the control panel
 dotnet run -- --translate  # one capture-and-translate
+dotnet test tests/WinLens.Core.Tests   # unit tests (also run on Linux/macOS)
 ```
 
 ### Project layout
@@ -33,15 +34,19 @@ dotnet run -- --translate  # one capture-and-translate
 | --- | --- |
 | `src/Native/` | Screen capture, global hotkey, startup registration |
 | `src/Services/` | OCR (`OcrService`), translation (`TranslationService`), settings |
-| `src/Models/` | Settings and OCR data types, language list |
+| `src/Models/` | Settings and OCR data types |
 | `src/Views/` | Tray host, translation overlay, control panel |
 | `src/Theme/` | Dark theme resource dictionary |
+| `core/WinLens.Core/` | Platform-neutral logic (no WPF/WinRT), unit-tested |
+| `tests/WinLens.Core.Tests/` | xUnit tests for `WinLens.Core` |
 
 ## Pull requests
 
 1. Fork and branch off `main`: `git checkout -b feat/my-change`.
 2. Keep each PR focused on one thing.
-3. Make sure it builds with no warnings: `dotnet build -c Release`.
+3. Make sure it builds with no warnings (`dotnet build -c Release`) and the tests pass
+   (`dotnet test tests/WinLens.Core.Tests`). Logic that doesn't need WPF or WinRT belongs
+   in `core/WinLens.Core`, where it can be unit-tested.
 4. Use [Conventional Commit](https://www.conventionalcommits.org/) messages
    (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
 5. Update the README or docs if behaviour changes.

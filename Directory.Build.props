@@ -1,0 +1,9 @@
+<Project>
+  <!-- Shared by the app, WinLens.Core and the tests. The version lives here only. -->
+  <PropertyGroup>
+    <Version>1.2.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>
