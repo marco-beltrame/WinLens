@@ -55,8 +55,6 @@
             <StackPanel Margin="22,6,22,20">
 
                 <TextBlock Text="Translate your screen" Style="{StaticResource H1Text}"/>
-                <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Press your shortcut anywhere in Windows to translate on-screen text right where it sits. It reads the monitor your cursor is on, so your other screens stay usable while the translation is open."/>
 
                 <Button x:Name="TranslateButton" Style="{StaticResource PrimaryButton}"
                         Margin="0,18,0,0" Click="OnTranslateNow">
@@ -90,9 +88,9 @@
                 <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
                 <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
                           SelectionChanged="OnEngineChanged">
-                    <ComboBoxItem Tag="google" Content="Google Translate (free, no setup)"/>
-                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate server"/>
-                    <ComboBoxItem Tag="local-llm" Content="Local AI model (Ollama, LM Studio…)"/>
+                    <ComboBoxItem Tag="google" Content="Google Translate"/>
+                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
+                    <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
                 </ComboBox>
                 <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
                            TextWrapping="Wrap"/>

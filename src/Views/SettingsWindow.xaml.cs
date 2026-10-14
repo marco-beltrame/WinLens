@@ -171,15 +171,14 @@ public partial class SettingsWindow : Window
         ModelPanel.Visibility = llm ? Visibility.Visible : Visibility.Collapsed;
         EngineStatus.Text = "";
 
+        // Google needs no explanation; the other two say what they connect to.
         EngineCaption.Text = engine switch
         {
-            EngineNames.LibreTranslate =>
-                "Your own LibreTranslate server, or a hosted one with its API key.",
-            EngineNames.LocalLlm =>
-                "Any OpenAI-compatible server on your PC, such as Ollama or LM Studio. "
-                + "Nothing leaves your computer; quality and speed depend on the model.",
-            _ => "Free and needs no setup. The text WinLens reads is sent to Google to be translated.",
+            EngineNames.LibreTranslate => "Your own server, or a hosted one with its API key.",
+            EngineNames.LocalLlm => "Ollama, LM Studio or any OpenAI-compatible server on your PC.",
+            _ => "",
         };
+        EngineCaption.Visibility = EngineCaption.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         EngineUrlBox.Text = llm ? s.LlmUrl : s.LibreTranslateUrl;
         EngineUrlBox.Tag = llm ? "http://localhost:11434/v1" : "http://localhost:5000";
