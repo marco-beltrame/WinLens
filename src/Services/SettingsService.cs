@@ -29,12 +29,13 @@ public sealed class SettingsService
     public UserSettings Load()
     {
         bool loadedFromDisk = false;
+        string? onDiskJson = null;
         try
         {
             if (File.Exists(FilePath))
             {
-                var json = File.ReadAllText(FilePath);
-                var loaded = JsonSerializer.Deserialize<UserSettings>(json, Json);
+                onDiskJson = File.ReadAllText(FilePath);
+                var loaded = JsonSerializer.Deserialize<UserSettings>(onDiskJson, Json);
                 if (loaded != null)
                 {
                     Current = loaded;
@@ -52,9 +53,19 @@ public sealed class SettingsService
             // First run: pick the user's Windows display language as the default
             // target. Use the OS API instead of CultureInfo because the .NET
             // CLI / hosting can override the process culture to en-US.
-            var sys = GetUserDisplayLanguage();
+            var sys = MapToTargetCode(GetUserDisplayLanguage());
             if (!string.IsNullOrEmpty(sys))
                 Current.TargetLanguage = sys;
+        }
+        else
+        {
+            // Drop properties left over from older versions, and materialise ones added
+            // since (e.g. the region hotkey), so the file on disk always mirrors the
+            // current model. Only rewrite when it actually differs — otherwise every
+            // launch would touch the file for nothing.
+            var canonical = JsonSerializer.Serialize(Current, Json);
+            if (canonical != onDiskJson)
+                WriteAtomic(canonical);
         }
 
         LoadedFromDisk = loadedFromDisk;
@@ -73,19 +84,77 @@ public sealed class SettingsService
             {
                 var name = sb.ToString();
                 if (!string.IsNullOrEmpty(name))
-                    return name.Split('-')[0];
+                    return name;
             }
         }
         catch { /* fallback below */ }
 
-        try { return CultureInfo.InstalledUICulture.TwoLetterISOLanguageName; }
+        try { return CultureInfo.InstalledUICulture.Name; }
         catch { return "en"; }
+    }
+
+    /// <summary>
+    /// Map a full Windows locale name to a code that actually exists in
+    /// <see cref="LanguageList"/>. Returning a code outside the list would leave the
+    /// language combos with nothing to select (they'd fall back to the first entry) and
+    /// lose script distinctions the backend needs (zh-Hant must become zh-TW, not zh).
+    /// Unknown locales return null so the caller keeps the "en" default.
+    /// </summary>
+    private static string? MapToTargetCode(string locale)
+    {
+        if (string.IsNullOrEmpty(locale)) return null;
+
+        if (locale.StartsWith("zh", StringComparison.OrdinalIgnoreCase))
+        {
+            bool traditional =
+                locale.Contains("Hant", StringComparison.OrdinalIgnoreCase) ||
+                locale.EndsWith("-TW", StringComparison.OrdinalIgnoreCase) ||
+                locale.EndsWith("-HK", StringComparison.OrdinalIgnoreCase) ||
+                locale.EndsWith("-MO", StringComparison.OrdinalIgnoreCase);
+            return traditional ? "zh-TW" : "zh";
+        }
+
+        var baseTag = locale.Split('-')[0];
+        foreach (var (code, _) in LanguageList.Items)
+        {
+            if (string.Equals(code, locale, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, baseTag, StringComparison.OrdinalIgnoreCase))
+                return code;
+        }
+        return null;
     }
 
     public void Save(UserSettings settings)
     {
         Current = settings;
-        Directory.CreateDirectory(Dir);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(settings, Json));
+        WriteAtomic(JsonSerializer.Serialize(settings, Json));
+    }
+
+    /// <summary>
+    /// Writes settings.json via a temp file + replace, so an interrupted write can never
+    /// leave truncated JSON behind. That matters more than it looks: <see cref="Load"/>
+    /// treats unparseable JSON as "first run", which would silently reset the user's
+    /// language and shortcuts and pop the settings window on the next launch.
+    /// Best-effort throughout — Save runs from UI event handlers and a locked or full
+    /// disk must not take the app down; the in-memory settings stay applied either way.
+    /// </summary>
+    private static void WriteAtomic(string json)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            var tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, json);
+
+            if (File.Exists(FilePath))
+                File.Replace(tmp, FilePath, null);
+            else
+                File.Move(tmp, FilePath);
+        }
+        catch
+        {
+            // Clean up a half-written temp file so it can't accumulate.
+            try { File.Delete(FilePath + ".tmp"); } catch { /* nothing more to do */ }
+        }
     }
 }

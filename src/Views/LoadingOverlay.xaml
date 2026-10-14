@@ -11,7 +11,7 @@
         Focusable="False"
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         UseLayoutRounding="True"
         FontFamily="Segoe UI">
 

@@ -15,4 +15,11 @@ public sealed class UserSettings
 
     public HotkeyModifiers HotkeyModifiers { get; set; } = HotkeyModifiers.Control | HotkeyModifiers.Alt;
     public Key HotkeyKey { get; set; } = Key.T;
+
+    /// <summary>
+    /// Shortcut for region (drag-to-select) capture. Default Ctrl+Shift+R — no Alt, to
+    /// avoid the common NVIDIA / overlay-tool bindings.
+    /// </summary>
+    public HotkeyModifiers RegionHotkeyModifiers { get; set; } = HotkeyModifiers.Control | HotkeyModifiers.Shift;
+    public Key RegionHotkeyKey { get; set; } = Key.R;
 }

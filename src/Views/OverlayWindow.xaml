@@ -13,7 +13,16 @@
         SnapsToDevicePixels="True"
         Opacity="0">
     <Grid>
-        <Image x:Name="BackgroundImage" Stretch="Fill"/>
+        <!-- Backdrop, visible only where the capture does not reach (region capture:
+             the rest of that monitor). Dimming it shows what was translated. The alpha
+             also has to be non-zero: fully transparent areas of an AllowsTransparency
+             window are click-through, and this area must still swallow clicks. -->
+        <Canvas x:Name="BackdropCanvas" Background="#66000000">
+            <Image x:Name="BackgroundImage"/>
+        </Canvas>
+
+        <!-- Translation boxes. Separate canvas so rebuilding the boxes on a language
+             change cannot clear the screenshot underneath. -->
         <Canvas x:Name="OverlayCanvas" Background="#01000000"/>
 
         <!-- Floating control bar -->
