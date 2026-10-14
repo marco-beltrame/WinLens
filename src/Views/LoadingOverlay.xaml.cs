@@ -1,8 +1,9 @@
 using System;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
+using WinLens.Native;
 using DRectangle = System.Drawing.Rectangle;
 
 namespace WinLens.Views;
@@ -13,13 +14,7 @@ namespace WinLens.Views;
 /// </summary>
 public partial class LoadingOverlay : Window
 {
-    private const uint SWP_NOSIZE     = 0x0001;
-    private const uint SWP_NOZORDER   = 0x0004;
-    private const uint SWP_NOACTIVATE = 0x0010;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-        int x, int y, int cx, int cy, uint flags);
+    private DRectangle? _areaPx;
 
     public LoadingOverlay()
     {
@@ -41,12 +36,29 @@ public partial class LoadingOverlay : Window
         Show();
         UpdateLayout();
 
+        // If the HWND is missing it can't be moved; visible in the default spot still beats
+        // invisible, so show it either way.
+        _areaPx = areaPx;
+        Recenter();
+        Opacity = 1;
+    }
+
+    /// <summary>
+    /// Moving the spinner onto a monitor with a different DPI rescales it, so the centre
+    /// computed with the old size is off; centre it again once WPF has re-measured it.
+    /// </summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (_areaPx is null) return;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => Recenter());
+    }
+
+    private bool Recenter()
+    {
+        if (_areaPx is not DRectangle area) return false;
         var hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd == IntPtr.Zero)
-        {
-            Opacity = 1; // can't reposition; better visible in the default spot than invisible
-            return;
-        }
+        if (hwnd == IntPtr.Zero) return false;
 
         var dpi = VisualTreeHelper.GetDpi(this);
         double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
@@ -55,12 +67,9 @@ public partial class LoadingOverlay : Window
         int widthPx  = (int)Math.Round(ActualWidth  * scaleX);
         int heightPx = (int)Math.Round(ActualHeight * scaleY);
 
-        int x = areaPx.X + (areaPx.Width  - widthPx)  / 2;
-        int y = areaPx.Y + (areaPx.Height - heightPx) / 2;
-
-        SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0,
-            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-
-        Opacity = 1;
+        WindowPlacement.MoveTo(hwnd,
+            area.X + (area.Width  - widthPx)  / 2,
+            area.Y + (area.Height - heightPx) / 2);
+        return true;
     }
 }

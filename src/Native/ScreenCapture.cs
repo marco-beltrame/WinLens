@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -51,11 +52,13 @@ public static class ScreenCapture
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdc, ref RECT lprcMonitor, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr data);
 
     /// <summary>Bounding box of every monitor, in physical pixels.</summary>
     public static Rectangle VirtualScreenBounds => new(
@@ -75,14 +78,16 @@ public static class ScreenCapture
         return BoundsOf(MonitorFromPoint(native, MONITOR_DEFAULTTONEAREST));
     }
 
-    /// <summary>Bounds of the monitor that <paramref name="rect"/> mostly sits on.</summary>
-    public static Rectangle MonitorBoundsFor(Rectangle rect)
+    /// <summary>Bounds of every monitor, in physical pixels.</summary>
+    public static IReadOnlyList<Rectangle> AllMonitorBounds()
     {
-        var native = new RECT
+        var result = new List<Rectangle>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr _, IntPtr _, ref RECT r, IntPtr _) =>
         {
-            Left = rect.Left, Top = rect.Top, Right = rect.Right, Bottom = rect.Bottom,
-        };
-        return BoundsOf(MonitorFromRect(ref native, MONITOR_DEFAULTTONEAREST));
+            result.Add(new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
+            return true;
+        }, IntPtr.Zero);
+        return result;
     }
 
     private static Rectangle BoundsOf(IntPtr hMonitor)

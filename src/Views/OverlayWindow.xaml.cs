@@ -14,6 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinLens.Models;
+using WinLens.Native;
 using WinLens.Services;
 using DBitmap = System.Drawing.Bitmap;
 using DRectangle = System.Drawing.Rectangle;
@@ -42,14 +43,6 @@ public partial class OverlayWindow : Window
     private string _currentTarget;
     private bool _suppressLangEvents;
 
-    [DllImport("user32.dll")] private static extern uint GetDpiForSystem();
-
-    private const uint SWP_NOZORDER = 0x0004;
-    private const uint SWP_NOACTIVATE = 0x0010;
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-        int x, int y, int cx, int cy, uint flags);
-
     /// <param name="imageBounds">
     /// Virtual-screen rectangle the screenshot was taken from. OCR block coordinates are
     /// relative to this rectangle's top-left.
@@ -57,7 +50,7 @@ public partial class OverlayWindow : Window
     /// <param name="windowBounds">
     /// Virtual-screen rectangle the overlay window should cover. Equal to
     /// <paramref name="imageBounds"/> for a full-screen or single-monitor capture; for a
-    /// region capture it is the monitor holding the region, so the control bar has room
+    /// region capture it is the monitor(s) the region touches, so the control bar has room
     /// while the user's OTHER monitors stay uncovered and keep receiving input.
     /// </param>
     public OverlayWindow(
@@ -82,28 +75,11 @@ public partial class OverlayWindow : Window
         _onTargetLangChanged = onTargetLangChanged;
         _recentTargets = recentTargets ?? Array.Empty<string>();
 
-        uint dpi = GetDpiForSystem();
-        if (dpi == 0) dpi = 96;
-        _pixelToDip = 96.0 / dpi;
-
-        // Initial DIP placement (decides which monitor WPF associates the window with).
-        Left   = _windowBounds.X      * _pixelToDip;
-        Top    = _windowBounds.Y      * _pixelToDip;
-        Width  = _windowBounds.Width  * _pixelToDip;
-        Height = _windowBounds.Height * _pixelToDip;
-
-        // The DIP math above uses the SYSTEM dpi, which on a mixed-DPI multi-monitor
-        // setup is only correct for the primary monitor. Once the HWND exists, pin the
-        // window in PHYSICAL pixels so it covers exactly the intended area; the px→DIP
-        // factor is then re-read from the window's actual DPI in Loaded (before the
-        // text boxes are laid out).
-        SourceInitialized += (_, _) =>
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            SetWindowPos(hwnd, IntPtr.Zero,
-                _windowBounds.X, _windowBounds.Y, _windowBounds.Width, _windowBounds.Height,
-                SWP_NOZORDER | SWP_NOACTIVATE);
-        };
+        // Pinned in PHYSICAL pixels, including across a DPI change when the window lands
+        // on a monitor scaled differently from the primary. The px→DIP factor is a guess
+        // until Loaded / OnDpiChanged read the DPI WPF really lays the window out with.
+        _pixelToDip = WindowPlacement.SystemPixelToDip();
+        WindowPlacement.PinToPhysicalBounds(this, _windowBounds);
 
         BackgroundImage.Source = ToBitmapSource(screenshot);
 
@@ -131,9 +107,7 @@ public partial class OverlayWindow : Window
         {
             // WPF lays the window out with one DPI; use that exact value so box
             // coordinates land on the right physical pixels.
-            var actual = VisualTreeHelper.GetDpi(this);
-            if (actual.DpiScaleX > 0)
-                _pixelToDip = 1.0 / actual.DpiScaleX;
+            _pixelToDip = WindowPlacement.PixelToDip(this, _pixelToDip);
 
             PlaceBackgroundImage();
             BuildOverlayBoxes();
@@ -142,6 +116,21 @@ public partial class OverlayWindow : Window
             Activate();
             Focus();
         };
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (newDpi.DpiScaleX <= 0) return;
+        _pixelToDip = 1.0 / newDpi.DpiScaleX;
+
+        // The boxes were laid out for the old DPI; rebuild them so they stay over the
+        // original text. Block state (translations) lives on the OcrBlocks, so nothing is lost.
+        if (IsLoaded)
+        {
+            PlaceBackgroundImage();
+            BuildOverlayBoxes();
+        }
     }
 
     /// <summary>Offset of the screenshot inside the window, in physical pixels.</summary>

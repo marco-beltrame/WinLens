@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Hardcodet.Wpf.TaskbarNotification;
+using WinLens.Layout;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
@@ -284,12 +285,9 @@ public partial class MainWindow : Window, IDisposable
                     b.OriginalText, target, b.DetectedLanguage);
             }));
 
-            // For a region capture the window is grown to the whole monitor so the control
-            // bar has somewhere to sit; for the other scopes it is exactly the capture.
-            // Either way it never spills onto a monitor we did not capture.
-            var windowBounds = regionSelect
-                ? ScreenCapture.MonitorBoundsFor(capture.Bounds)
-                : capture.Bounds;
+            // Never spills onto a monitor we did not capture (see OverlayLayout).
+            var windowBounds = OverlayLayout.WindowBounds(
+                capture.Bounds, ScreenCapture.AllMonitorBounds(), regionSelect);
 
             var overlay = new OverlayWindow(
                 capture.Bitmap,
