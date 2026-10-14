@@ -199,7 +199,8 @@ public partial class MainWindow : Window, IDisposable
         {
             _settingsWindow = new SettingsWindow(
                 _settings,
-                onTranslate: () => _ = RunTranslateAsync(regionSelect: false),
+                // Settings hides itself before calling this; bring it back afterwards.
+                onTranslate: () => _ = RunTranslateAsync(regionSelect: false, reopenSettings: true),
                 onApplyHotkeys: TryApplyHotkeys,
                 onHotkeyCapturePaused: SetHotkeysPaused);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
@@ -216,13 +217,21 @@ public partial class MainWindow : Window, IDisposable
 
     // ---------------- Capture + translate ----------------
 
-    private async Task RunTranslateAsync(bool regionSelect)
+    /// <param name="reopenSettings">
+    /// The settings window was hidden by the caller and should come back once the cycle ends.
+    /// </param>
+    private async Task RunTranslateAsync(bool regionSelect, bool reopenSettings = false)
     {
-        if (_busy) return;
+        if (_busy)
+        {
+            if (reopenSettings) _settingsWindow?.Show();
+            return;
+        }
         _busy = true;
         LoadingOverlay? loading = null;
+        OverlayWindow? overlay = null;
         System.Drawing.Bitmap? ownedBitmap = null;
-        bool restoreSettings = false;
+        bool restoreSettings = reopenSettings;
         try
         {
             // A still-open overlay must not end up in the new screenshot — we'd OCR our
@@ -283,17 +292,13 @@ public partial class MainWindow : Window, IDisposable
             }
 
             var target = _settings.Current.TargetLanguage;
-            await Task.WhenAll(blocks.Select(async b =>
-            {
-                b.TranslatedText = await _translator.TranslateAsync(
-                    b.OriginalText, target, b.DetectedLanguage);
-            }));
+            await TranslateBlocksAsync(blocks, target);
 
             // Never spills onto a monitor we did not capture (see OverlayLayout).
             var windowBounds = OverlayLayout.WindowBounds(
                 capture.Bounds, ScreenCapture.AllMonitorBounds(), regionSelect);
 
-            var overlay = new OverlayWindow(
+            overlay = new OverlayWindow(
                 capture.Bitmap,
                 capture.Bounds,
                 windowBounds,
@@ -310,9 +315,10 @@ public partial class MainWindow : Window, IDisposable
             ownedBitmap = null; // the overlay disposes the screenshot on Closed
 
             bool bringSettingsBack = restoreSettings;
-            overlay.Closed += (_, _) =>
+            var shown = overlay;
+            shown.Closed += (_, _) =>
             {
-                if (ReferenceEquals(_overlay, overlay))
+                if (ReferenceEquals(_overlay, shown))
                     _overlay = null;
                 if (bringSettingsBack)
                     _settingsWindow?.Show();
@@ -327,6 +333,16 @@ public partial class MainWindow : Window, IDisposable
         }
         catch (Exception ex)
         {
+            // Clear our own windows first: the spinner must not sit over the message, and an
+            // overlay that failed while loading would otherwise stay open, invisible
+            // (opacity 0) and holding the screenshot.
+            loading?.Close();
+            loading = null;
+            if (overlay != null)
+            {
+                try { overlay.Close(); } catch { /* already torn down */ }
+            }
+
             MessageBox.Show(ex.Message, "WinLens — error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -337,6 +353,15 @@ public partial class MainWindow : Window, IDisposable
                 _settingsWindow?.Show(); // no overlay took over (no text / error)
             _busy = false;
         }
+    }
+
+    private async Task TranslateBlocksAsync(System.Collections.Generic.List<OcrBlock> blocks, string target)
+    {
+        await Task.WhenAll(blocks.Select(async b =>
+        {
+            b.TranslatedText = await _translator.TranslateAsync(
+                b.OriginalText, target, b.DetectedLanguage);
+        }));
     }
 
     /// <summary>
