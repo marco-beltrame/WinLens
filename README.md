@@ -65,6 +65,7 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
 - Dark control panel. You can change the target language straight from the overlay.
 - Right-click a block to copy the original text or the translation.
+- Works out of the box with Google Translate, or with your own LibreTranslate server or a local AI model (Ollama, LM Studio) so your text never leaves your PC.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
 ## Control panel
@@ -75,6 +76,23 @@ choose the OCR source language, and toggle launch-at-startup.
 <div align="center">
 <img src="assets/settings.png" alt="WinLens control panel" width="330"/>
 </div>
+
+## Translation engines and privacy
+
+Choose the engine under **Translation engine** in the control panel.
+
+| Engine | Setup | Where your text goes |
+|---|---|---|
+| **Google Translate** (default) | None | Google's servers, with MyMemory as a fallback |
+| **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
+| **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
+
+With LibreTranslate or a local model, nothing is sent to Google unless you turn on
+**Use Google as a backup**. **Test connection** checks the settings before you rely on them.
+API keys are encrypted for your Windows account (DPAPI) before they are saved.
+
+With the default engine, the text WinLens reads from your screen is sent to Google
+to be translated. Screenshots themselves never leave your PC.
 
 ## Installation
 
@@ -140,11 +158,11 @@ language only saves a little time.
 Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in place
 ```
 
-1. Capture the whole virtual screen (DPI-accurate, all monitors).
+1. Capture the monitor under the cursor, or the region you drag (DPI-accurate on mixed-scaling setups).
 2. Upscale the image about 2x so small UI text is recognized more reliably.
 3. Run every installed OCR recognizer and keep from each only the blocks whose script matches
    it (Latin from the Latin engine, CJK from the CJK engine), then drop overlapping duplicates.
-4. Translate each line (Google endpoint, with a MyMemory fallback), cached per session.
+4. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
 5. Draw an opaque, color- and font-matched box over each original line.
 
 ## Roadmap
@@ -155,7 +173,8 @@ The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 - [ ] Offline translation (Argos / NLLB): no network, no rate limits, more privacy.
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
-- [ ] Region capture: translate a selected area instead of the whole screen.
+- [x] Region capture: translate a selected area instead of the whole screen.
+- [x] LibreTranslate and local AI models (Ollama, LM Studio) as translation engines.
 - [x] Animated demo (GIF) in the README.
 
 ## Building from source
