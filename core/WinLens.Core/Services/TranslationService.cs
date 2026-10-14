@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web;
 using WinLens.Models;
 
 namespace WinLens.Services;
@@ -29,12 +29,28 @@ public sealed class TranslationService : IDisposable
     private readonly SemaphoreSlim _gate = new(4);
     private const int MaxCacheEntries = 2000;
 
-    public TranslationService()
+    // Google answers 429 (or stalls) once it decides we are too chatty; retrying it for
+    // every remaining block only adds a 10 s timeout per block before the fallback runs.
+    // After a trip, Google is skipped until this tick count (Environment.TickCount64).
+    private const long GoogleCooldownMs = 30_000;
+    private long _googleBlockedUntil;
+
+    // MyMemory rejects queries over 500 chars (in-body, with HTTP 200).
+    private const int MyMemoryMaxChars = 500;
+
+    // Encoded queries beyond this are sent as POST; long GET URLs get rejected by the server.
+    private const int MaxGetQueryChars = 2000;
+
+    public TranslationService() : this(null) { }
+
+    internal TranslationService(HttpMessageHandler? handler, string? logPath = null)
     {
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _http = handler == null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(10) }
+            : new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(10) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinLens/1.0");
-        _logPath = Path.Combine(Path.GetTempPath(), "winlens.log");
+        _logPath = logPath ?? Path.Combine(Path.GetTempPath(), "winlens.log");
     }
 
     public async Task<string> TranslateAsync(
@@ -77,7 +93,8 @@ public sealed class TranslationService : IDisposable
         }
         finally
         {
-            _gate.Release();
+            // Dispose() may have run while this request was in flight.
+            try { _gate.Release(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -143,59 +160,97 @@ public sealed class TranslationService : IDisposable
         _cache[key] = value;
     }
 
+    private bool GoogleBlocked => Environment.TickCount64 < Interlocked.Read(ref _googleBlockedUntil);
+
+    private void TripGoogleBreaker() =>
+        Interlocked.Exchange(ref _googleBlockedUntil, Environment.TickCount64 + GoogleCooldownMs);
+
     private async Task<string?> TryGoogleAsync(string text, string tgt, CancellationToken ct)
     {
-        var url = $"{GoogleEndpoint}?client=gtx&sl=auto&tl={tgt}&dt=t&q={HttpUtility.UrlEncode(text)}";
+        if (GoogleBlocked)
+            return null;
+
+        var query = Uri.EscapeDataString(text);
+        var baseUrl = $"{GoogleEndpoint}?client=gtx&sl=auto&tl={tgt}&dt=t";
         try
         {
-            using var resp = await _http.GetAsync(url, ct);
-            if (!resp.IsSuccessStatusCode)
+            HttpResponseMessage resp;
+            if (query.Length > MaxGetQueryChars)
             {
-                Log($"google http {(int)resp.StatusCode} for tgt={tgt}");
-                return null;
+                using var content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("q", text) });
+                resp = await _http.PostAsync(baseUrl, content, ct);
+            }
+            else
+            {
+                resp = await _http.GetAsync($"{baseUrl}&q={query}", ct);
             }
 
-            var body = await resp.Content.ReadAsStringAsync(ct);
-            if (!body.StartsWith('['))
+            using (resp)
             {
-                Log($"google non-json body (first 80 chars): {body.AsSpan(0, Math.Min(80, body.Length)).ToString()}");
-                return null;
-            }
-
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
-                return null;
-
-            var sentences = root[0];
-            if (sentences.ValueKind != JsonValueKind.Array)
-                return null;
-
-            var sb = new StringBuilder();
-            foreach (var s in sentences.EnumerateArray())
-            {
-                if (s.ValueKind == JsonValueKind.Array && s.GetArrayLength() > 0 &&
-                    s[0].ValueKind == JsonValueKind.String)
+                if (!resp.IsSuccessStatusCode)
                 {
-                    sb.Append(s[0].GetString());
+                    Log($"google http {(int)resp.StatusCode} for tgt={tgt}");
+                    if (resp.StatusCode == HttpStatusCode.TooManyRequests)
+                        TripGoogleBreaker();
+                    return null;
                 }
+
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                if (!body.StartsWith('['))
+                {
+                    Log($"google non-json body (first 80 chars): {body.AsSpan(0, Math.Min(80, body.Length)).ToString()}");
+                    return null;
+                }
+
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+                    return null;
+
+                var sentences = root[0];
+                if (sentences.ValueKind != JsonValueKind.Array)
+                    return null;
+
+                var sb = new StringBuilder();
+                foreach (var s in sentences.EnumerateArray())
+                {
+                    if (s.ValueKind == JsonValueKind.Array && s.GetArrayLength() > 0 &&
+                        s[0].ValueKind == JsonValueKind.String)
+                    {
+                        sb.Append(s[0].GetString());
+                    }
+                }
+                var result = sb.ToString();
+                return string.IsNullOrEmpty(result) ? null : result;
             }
-            var result = sb.ToString();
-            return string.IsNullOrEmpty(result) ? null : result;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // the caller cancelled: not a backend failure
         }
         catch (Exception ex)
         {
             Log($"google exception: {ex.GetType().Name}: {ex.Message}");
+            // HttpClient's own timeout surfaces as a TaskCanceledException.
+            if (ex is OperationCanceledException)
+                TripGoogleBreaker();
             return null;
         }
     }
 
     private async Task<string?> TryMyMemoryAsync(string text, string src, string tgt, CancellationToken ct)
     {
+        // Nothing to translate; return null so the caller returns the text without caching it.
         if (string.Equals(src, tgt, StringComparison.OrdinalIgnoreCase))
-            return text;
+            return null;
 
-        var url = $"{MyMemoryEndpoint}?q={HttpUtility.UrlEncode(text)}&langpair={src}|{tgt}";
+        if (text.Length > MyMemoryMaxChars)
+        {
+            Log($"mymemory skipped: text is {text.Length} chars (max {MyMemoryMaxChars})");
+            return null;
+        }
+
+        var url = $"{MyMemoryEndpoint}?q={Uri.EscapeDataString(text)}&langpair={src}|{tgt}";
         try
         {
             using var resp = await _http.GetAsync(url, ct);
@@ -206,13 +261,36 @@ public sealed class TranslationService : IDisposable
             }
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, default, ct);
-            if (doc.RootElement.TryGetProperty("responseData", out var data) &&
-                data.TryGetProperty("translatedText", out var translated))
+            var root = doc.RootElement;
+
+            // Errors (quota, query too long) arrive as HTTP 200 with the status in the body,
+            // as a number or a string, and the message in place of the translation.
+            if (!root.TryGetProperty("responseStatus", out var status) || !IsStatusOk(status))
+            {
+                Log($"mymemory in-body status {status.ToString()} for {src}|{tgt}");
+                return null;
+            }
+
+            if (root.TryGetProperty("responseData", out var data) &&
+                data.ValueKind == JsonValueKind.Object &&
+                data.TryGetProperty("translatedText", out var translated) &&
+                translated.ValueKind == JsonValueKind.String)
             {
                 var output = translated.GetString();
-                return string.IsNullOrEmpty(output) ? null : output;
+                if (string.IsNullOrEmpty(output) ||
+                    output.StartsWith("MYMEMORY WARNING", StringComparison.OrdinalIgnoreCase) ||
+                    output.StartsWith("QUERY LENGTH LIMIT", StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"mymemory rejected message: {output}");
+                    return null;
+                }
+                return output;
             }
             return null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -220,6 +298,13 @@ public sealed class TranslationService : IDisposable
             return null;
         }
     }
+
+    private static bool IsStatusOk(JsonElement status) => status.ValueKind switch
+    {
+        JsonValueKind.Number => status.TryGetInt32(out var n) && n == 200,
+        JsonValueKind.String => int.TryParse(status.GetString(), out var n) && n == 200,
+        _ => false,
+    };
 
     // Bound the log the same way App does for crash.log. A backend that is down or
     // rate-limiting writes one line per text block per translate, so an unbounded file
@@ -238,7 +323,6 @@ public sealed class TranslationService : IDisposable
             // the file exclusively, so without this they would trip over each other.
             lock (_logLock)
             {
-
                 if (_logBytes < 0)
                 {
                     var info = new FileInfo(_logPath);
