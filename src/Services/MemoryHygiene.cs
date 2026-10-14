@@ -1,4 +1,5 @@
 using System;
+using System.Runtime;
 using System.Runtime.InteropServices;
 
 namespace WinLens.Services;
@@ -15,6 +16,9 @@ public static class MemoryHygiene
 {
     public static void Trim()
     {
+        // compacting: true compacts the small-object heaps only; the LOH, where the
+        // screenshot-sized buffers live, needs this one-shot opt-in (reset by the next GC).
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers(); // release GDI bitmap finalizers
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);

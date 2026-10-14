@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -42,6 +43,10 @@ public partial class OverlayWindow : Window
     private readonly Dictionary<OcrBlock, TextBox> _textBoxes = new();
     private string _currentTarget;
     private bool _suppressLangEvents;
+
+    // Cancels the re-translation for the previous language when the user picks another
+    // one before it finished, so late results can't overwrite the newer language.
+    private CancellationTokenSource? _retranslateCts;
 
     /// <param name="imageBounds">
     /// Virtual-screen rectangle the screenshot was taken from. OCR block coordinates are
@@ -91,6 +96,8 @@ public partial class OverlayWindow : Window
         OverlayCanvas.MouseLeftButtonDown += (_, _) => Close();
         Closed += (_, _) =>
         {
+            _retranslateCts?.Cancel();
+
             // Release the heavy bits the window held: the decoded full-screen screenshot
             // and the per-line text boxes. Without this the visual tree keeps them alive.
             BackgroundImage.Source = null;
@@ -176,16 +183,36 @@ public partial class OverlayWindow : Window
             return;
 
         _currentTarget = newTarget;
-        _onTargetLangChanged(newTarget);
 
-        await RetranslateAllAsync();
+        _retranslateCts?.Cancel();
+        _retranslateCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _retranslateCts = cts;
+
+        // async void: an exception escaping here would take the whole app down.
+        try
+        {
+            _onTargetLangChanged(newTarget);
+            await RetranslateAllAsync(newTarget, cts.Token);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Superseded by a newer language choice, or the overlay closed.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "WinLens — error",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
-    private async Task RetranslateAllAsync()
+    private async Task RetranslateAllAsync(string target, CancellationToken ct)
     {
         var tasks = _blocks.Select(async b =>
         {
-            var translated = await _translator.TranslateAsync(b.OriginalText, _currentTarget, b.DetectedLanguage);
+            var translated = await _translator.TranslateAsync(b.OriginalText, target, b.DetectedLanguage, ct);
+            // Results arrive on the UI thread; drop them once a newer request has started.
+            ct.ThrowIfCancellationRequested();
             b.TranslatedText = translated;
             if (_textBoxes.TryGetValue(b, out var tb))
                 ApplyText(tb, translated);

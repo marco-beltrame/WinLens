@@ -80,8 +80,14 @@ public partial class App : Application
     // Keep crash.log from growing without bound if a crash recurs every launch.
     private const long MaxCrashLogBytes = 512 * 1024;
 
+    // An exception the dispatcher doesn't handle reaches AppDomain.UnhandledException
+    // too as WPF tears down; log it once.
+    private static Exception? _lastLogged;
+
     private static void WriteCrash(string source, Exception? ex)
     {
+        if (ex != null && ReferenceEquals(ex, _lastLogged)) return;
+        _lastLogged = ex;
         try
         {
             Directory.CreateDirectory(LogDir);
