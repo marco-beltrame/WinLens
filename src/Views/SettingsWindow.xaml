@@ -120,6 +120,9 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
                 </Grid>
 
+                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+
                 <!-- Launch at startup -->
                 <Grid Margin="0,22,0,0">
                     <Grid.ColumnDefinitions>
@@ -131,6 +134,8 @@
                                    FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="Run WinLens automatically when you sign in."
                                    Style="{StaticResource CaptionText}" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="StartupMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                                   Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
                     </StackPanel>
                     <CheckBox x:Name="StartupToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                               VerticalAlignment="Center"
