@@ -50,13 +50,11 @@
             <!-- ============== Content ============== -->
             <!-- Scrolls so the window still works on a short display (the settings list
                  grew past what fits on a 768 px laptop screen). -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="ContentScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="22,6,22,20">
 
                 <TextBlock Text="Translate your screen" Style="{StaticResource H1Text}"/>
-                <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Press your shortcut anywhere in Windows to translate on-screen text right where it sits. It reads the monitor your cursor is on, so your other screens stay usable while the translation is open."/>
 
                 <Button x:Name="TranslateButton" Style="{StaticResource PrimaryButton}"
                         Margin="0,18,0,0" Click="OnTranslateNow">
@@ -90,9 +88,9 @@
                 <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
                 <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
                           SelectionChanged="OnEngineChanged">
-                    <ComboBoxItem Tag="google" Content="Google Translate (free, no setup)"/>
-                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate server"/>
-                    <ComboBoxItem Tag="local-llm" Content="Local AI model (Ollama, LM Studio…)"/>
+                    <ComboBoxItem Tag="google" Content="Google Translate"/>
+                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
+                    <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
                 </ComboBox>
                 <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
                            TextWrapping="Wrap"/>
@@ -159,6 +157,9 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeHotkey"/>
                 </Grid>
 
+                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+
                 <!-- Shortcut (drag-selected region) -->
                 <TextBlock Text="REGION SHORTCUT" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
                 <Grid>
@@ -176,7 +177,7 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
                 </Grid>
 
-                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                <TextBlock x:Name="RegionHotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
                            Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
 
                 <!-- Launch at startup -->
@@ -202,7 +203,7 @@
                 <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,22,0,14"/>
                 <TextBlock x:Name="FooterText" Style="{StaticResource CaptionText}"
                            HorizontalAlignment="Center"
-                           Text="WinLens v1.2"/>
+                           Text="WinLens"/>
             </StackPanel>
             </ScrollViewer>
         </Grid>

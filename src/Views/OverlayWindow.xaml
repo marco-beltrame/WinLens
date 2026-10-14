@@ -48,7 +48,7 @@
                 <TextBlock Text="Esc to close" Foreground="{StaticResource TextFaintBrush}"
                            FontFamily="Segoe UI" FontSize="11"
                            VerticalAlignment="Center" Margin="14,0,4,0"/>
-                <Button x:Name="CloseBtn" Content="Close" Height="34"
+                <Button x:Name="CloseBtn" Content="Close" Height="34" Padding="12,0"
                         Style="{StaticResource SecondaryButton}"
                         Margin="8,0,0,0" Click="OnCloseClick"/>
             </StackPanel>

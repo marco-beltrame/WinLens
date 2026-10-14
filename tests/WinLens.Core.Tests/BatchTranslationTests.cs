@@ -122,6 +122,27 @@ public class BatchTranslationTests
     }
 
     [Fact]
+    public async Task LineHandedBackWithAccentsOrSpacingTouched_IsRetriedOnItsOwn()
+    {
+        var h = new FakeGoogle();
+        using var svc = Make(h);
+        h.Override = q => q.Contains('\n')
+            ? """[[["HALLO WELT\n","Hallo Welt\n",null,null,10],["Datei offnen.","Datei öffnen",null,null,10]],null,"en"]"""
+            : """[[["APRI FILE","Datei öffnen",null,null,10]],null,"de"]""";
+        var result = await svc.TranslateManyAsync(Lines("Hallo Welt", "Datei öffnen"), "it");
+        Assert.Equal(new[] { "HALLO WELT", "APRI FILE" }, result);
+        Assert.Equal(2, h.Queries.Count);
+    }
+
+    [Theory]
+    [InlineData("Datei öffnen", "Datei offnen", true)]
+    [InlineData("Datei öffnen", "Dateiöffnen.", true)]
+    [InlineData("Datei öffnen", "Open file", false)]
+    [InlineData("settings", "Settings", false)] // a change of case can be a real translation
+    public void IsSame_IgnoresAccentsSpacingAndPunctuation(string sent, string back, bool same) =>
+        Assert.Equal(same, GoogleTranslateProvider.IsSame(sent, back));
+
+    [Fact]
     public async Task ScreenAlreadyInTarget_IsNotRetriedLineByLine()
     {
         var h = new FakeGoogle();

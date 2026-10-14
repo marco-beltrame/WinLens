@@ -56,6 +56,13 @@ public partial class SettingsWindow : Window
         Func<EngineOptions, Task<EngineTestResult>> onTestEngine)
     {
         InitializeComponent();
+
+        // A closed dropdown would otherwise switch its selection under the wheel (changing
+        // engine or language by accident while scrolling): scroll the page instead.
+        ContentScroll.AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnContentWheel), true);
+        // From the assembly, so the footer can't fall behind the release again.
+        var version = typeof(SettingsWindow).Assembly.GetName().Version;
+        if (version != null) FooterText.Text = $"WinLens v{version.ToString(3)}";
         _settings = settings;
         _onTranslate = onTranslate;
         _onApplyHotkeys = onApplyHotkeys;
@@ -168,15 +175,14 @@ public partial class SettingsWindow : Window
         ModelPanel.Visibility = llm ? Visibility.Visible : Visibility.Collapsed;
         EngineStatus.Text = "";
 
+        // Google needs no explanation; the other two say what they connect to.
         EngineCaption.Text = engine switch
         {
-            EngineNames.LibreTranslate =>
-                "Your own LibreTranslate server, or a hosted one with its API key.",
-            EngineNames.LocalLlm =>
-                "Any OpenAI-compatible server on your PC, such as Ollama or LM Studio. "
-                + "Nothing leaves your computer; quality and speed depend on the model.",
-            _ => "Free and needs no setup. The text WinLens reads is sent to Google to be translated.",
+            EngineNames.LibreTranslate => "Your own server, or a hosted one with its API key.",
+            EngineNames.LocalLlm => "Ollama, LM Studio or any OpenAI-compatible server on your PC.",
+            _ => "",
         };
+        EngineCaption.Visibility = EngineCaption.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         EngineUrlBox.Text = llm ? s.LlmUrl : s.LibreTranslateUrl;
         EngineUrlBox.Tag = llm ? "http://localhost:11434/v1" : "http://localhost:5000";
@@ -334,6 +340,7 @@ public partial class SettingsWindow : Window
         _capturing = !region;
         _capturingRegion = region;
         HotkeyMessage.Visibility = Visibility.Collapsed;
+        RegionHotkeyMessage.Visibility = Visibility.Collapsed;
 
         // Suspend the global shortcuts so WM_HOTKEY doesn't eat the key being bound —
         // without this the user could never re-bind a combination to itself, or type the
@@ -367,6 +374,7 @@ public partial class SettingsWindow : Window
         _capturing = false;
         _capturingRegion = false;
         HotkeyMessage.Visibility = Visibility.Collapsed;
+        RegionHotkeyMessage.Visibility = Visibility.Collapsed;
 
         var idle = (Brush)FindResource("BorderBrush");
         HotkeyChip.BorderBrush = idle;
@@ -460,10 +468,30 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void OnContentWheel(object sender, MouseWheelEventArgs e)
+    {
+        for (var d = e.OriginalSource as DependencyObject; d != null && d != ContentScroll;
+             d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+        {
+            if (d is ComboBox combo)
+            {
+                if (combo.IsDropDownOpen) return; // the open list scrolls itself
+                e.Handled = true;
+                ContentScroll.ScrollToVerticalOffset(ContentScroll.VerticalOffset - e.Delta / 3.0);
+                return;
+            }
+        }
+    }
+
     private void ShowHotkeyMessage(string text)
     {
-        HotkeyMessage.Text = text;
-        HotkeyMessage.Visibility = Visibility.Visible;
+        // Under the shortcut being recorded, and scrolled into view: the window can be
+        // taller than a laptop screen, and a message below the fold looks like nothing happened.
+        var message = _capturingRegion ? RegionHotkeyMessage : HotkeyMessage;
+        message.Text = text;
+        message.Visibility = Visibility.Visible;
+        message.UpdateLayout();
+        message.BringIntoView();
     }
 
     private static HotkeyModifiers CurrentModifiers()
