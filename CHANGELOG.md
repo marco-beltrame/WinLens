@@ -25,6 +25,7 @@ All notable changes to this project are documented here. The format is based on
 - OCR picks recognizers by the script they actually read (Cyrillic, Greek, Arabic, Hebrew,
   Devanagari, Thai and CJK), instead of only Latin vs CJK.
 - The first-run target language follows the Windows display language.
+- A tidier settings window: shorter engine names and less explanatory text.
 
 ### Fixed
 - Overlays, the region selector and the spinner stay on the right screen, at the right size, on
@@ -39,6 +40,7 @@ All notable changes to this project are documented here. The format is based on
 - "Translate now" in the settings window brings the window back afterwards.
 - After a failed translation, the spinner no longer covers the error message.
 - Memory used for the screenshot is fully returned after each translation.
+- Scrolling the settings with the pointer over a dropdown no longer changes its selection.
 
 ## [1.2.0] - 2026-05-25
 
@@ -93,6 +95,7 @@ First public release.
 - Per-monitor-v2 DPI awareness and multi-monitor virtual-screen capture.
 - `--settings` and `--translate` command-line flags.
 
+[1.3.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.3.0
 [1.2.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.2.0
 [1.1.1]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.1.1
 [1.1.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.1.0
