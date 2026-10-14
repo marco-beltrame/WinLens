@@ -86,6 +86,62 @@
                            Text="+ Add OCR languages in Windows…"
                            MouseLeftButtonUp="OnAddLanguages"/>
 
+                <!-- Translation engine -->
+                <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
+                <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
+                          SelectionChanged="OnEngineChanged">
+                    <ComboBoxItem Tag="google" Content="Google Translate (free, no setup)"/>
+                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate server"/>
+                    <ComboBoxItem Tag="local-llm" Content="Local AI model (Ollama, LM Studio…)"/>
+                </ComboBox>
+                <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
+                           TextWrapping="Wrap"/>
+
+                <StackPanel x:Name="EnginePanel" Visibility="Collapsed">
+                    <TextBlock Text="SERVER ADDRESS" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <TextBox x:Name="EngineUrlBox" Style="{StaticResource ModernTextBox}"
+                             LostKeyboardFocus="OnEngineFieldCommitted"/>
+
+                    <StackPanel x:Name="ModelPanel">
+                        <TextBlock Text="MODEL" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                        <TextBox x:Name="EngineModelBox" Style="{StaticResource ModernTextBox}"
+                                 Tag="First model on the server"
+                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
+                    </StackPanel>
+
+                    <TextBlock Text="API KEY (OPTIONAL)" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <PasswordBox x:Name="EngineKeyBox" Style="{StaticResource ModernPasswordBox}"
+                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Use Google as a backup" Foreground="{StaticResource TextBrush}"
+                                       FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="For lines your server can't translate. Off keeps your text on your server."
+                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                  VerticalAlignment="Center"
+                                  Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"/>
+                    </Grid>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="TestEngineButton" Grid.Column="0" Style="{StaticResource SecondaryButton}"
+                                Content="Test connection" Click="OnTestEngine"/>
+                        <TextBlock x:Name="EngineStatus" Grid.Column="1" Margin="12,0,0,0"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{StaticResource TextSubtleBrush}"/>
+                    </Grid>
+                </StackPanel>
+
                 <!-- Shortcut: translates the monitor the cursor is on -->
                 <TextBlock Text="TRANSLATE SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
                 <Grid>

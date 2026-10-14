@@ -16,14 +16,18 @@ internal sealed class TranslationHttp : IDisposable
 
     // A full-screen capture can still mean several requests; firing them all at the free
     // endpoints at once invites 429s (which degrade silently to untranslated text).
-    private readonly SemaphoreSlim _gate = new(4);
+    private readonly SemaphoreSlim _gate;
     private readonly string _logPath;
 
-    public TranslationHttp(HttpMessageHandler? handler, string? logPath)
+    /// <param name="timeout">Per request; 10 s for the public services, longer for a local model.</param>
+    /// <param name="maxConcurrent">Requests in flight at once.</param>
+    public TranslationHttp(HttpMessageHandler? handler, string? logPath, TimeSpan? timeout = null, int maxConcurrent = 4)
     {
+        var t = timeout ?? TimeSpan.FromSeconds(10);
+        _gate = new SemaphoreSlim(maxConcurrent);
         Client = handler == null
-            ? new HttpClient { Timeout = TimeSpan.FromSeconds(10) }
-            : new HttpClient(handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(10) };
+            ? new HttpClient { Timeout = t }
+            : new HttpClient(handler, disposeHandler: false) { Timeout = t };
         Client.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinLens/1.0");
         _logPath = logPath ?? Path.Combine(Path.GetTempPath(), "winlens.log");

@@ -34,6 +34,7 @@ public partial class MainWindow : Window, IDisposable
     {
         InitializeComponent();
         _settings.Load();
+        _translator.Configure(_settings.Current.ToEngineOptions());
         Loaded += OnLoaded;
     }
 
@@ -203,7 +204,9 @@ public partial class MainWindow : Window, IDisposable
                 // Settings hides itself before calling this; bring it back afterwards.
                 onTranslate: () => _ = RunTranslateAsync(regionSelect: false, reopenSettings: true),
                 onApplyHotkeys: TryApplyHotkeys,
-                onHotkeyCapturePaused: SetHotkeysPaused);
+                onHotkeyCapturePaused: SetHotkeysPaused,
+                onEngineChanged: () => _translator.Configure(_settings.Current.ToEngineOptions()),
+                onTestEngine: options => _translator.TestAsync(options, _settings.Current.TargetLanguage));
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show();
         }

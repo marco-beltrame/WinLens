@@ -10,6 +10,7 @@ using System.Windows.Media;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
+using WinLens.Services.Translation;
 
 namespace WinLens.Views;
 
@@ -36,6 +37,12 @@ public partial class SettingsWindow : Window
 
     private readonly Action<bool> _onHotkeyCapturePaused;
 
+    /// <summary>Applies the engine settings just saved.</summary>
+    private readonly Action _onEngineChanged;
+
+    /// <summary>Tries an engine configuration without making it the active one.</summary>
+    private readonly Func<EngineOptions, Task<EngineTestResult>> _onTestEngine;
+
     private bool _suppressEvents;
     private bool _capturing;
     private bool _capturingRegion;
@@ -44,13 +51,17 @@ public partial class SettingsWindow : Window
         SettingsService settings,
         Action onTranslate,
         Func<HotkeyModifiers, Key, HotkeyModifiers, Key, HotkeyApplyResult> onApplyHotkeys,
-        Action<bool> onHotkeyCapturePaused)
+        Action<bool> onHotkeyCapturePaused,
+        Action onEngineChanged,
+        Func<EngineOptions, Task<EngineTestResult>> onTestEngine)
     {
         InitializeComponent();
         _settings = settings;
         _onTranslate = onTranslate;
         _onApplyHotkeys = onApplyHotkeys;
         _onHotkeyCapturePaused = onHotkeyCapturePaused;
+        _onEngineChanged = onEngineChanged;
+        _onTestEngine = onTestEngine;
 
         _suppressEvents = true;
 
@@ -60,6 +71,7 @@ public partial class SettingsWindow : Window
         RefreshStartupToggle();
         UpdateHotkeyText();
         UpdateRegionHotkeyText();
+        LoadEngineUi();
 
         _suppressEvents = false;
 
@@ -75,6 +87,7 @@ public partial class SettingsWindow : Window
             // they would stay suspended for the rest of the session.
             if (_capturing || _capturingRegion)
                 _onHotkeyCapturePaused(false);
+            CommitEngineFields(); // a field still being typed in never lost focus
         };
     }
 
@@ -82,7 +95,7 @@ public partial class SettingsWindow : Window
     // (so a language added via Windows settings appears without restart).
     private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is not true) { EndCaptureIfActive(); return; }
+        if (e.NewValue is not true) { EndCaptureIfActive(); CommitEngineFields(); return; }
         _suppressEvents = true;
         RebuildLanguageOptions(); // float most-recent targets to the top
         BuildSourceOptions();
@@ -126,6 +139,146 @@ public partial class SettingsWindow : Window
         _settings.Current.TargetLanguage = code;
         LanguagePicker.RecordRecent(_settings.Current, code);
         _settings.Save(_settings.Current);
+    }
+
+    // ---------------- Translation engine ----------------
+
+    private string CurrentEngine =>
+        (EngineCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? EngineNames.Google;
+
+    private void LoadEngineUi()
+    {
+        var s = _settings.Current;
+        var name = EngineNames.Normalize(s.TranslationEngine);
+        foreach (ComboBoxItem item in EngineCombo.Items)
+            if (item.Tag as string == name)
+                EngineCombo.SelectedItem = item;
+        FallbackToggle.IsChecked = s.EngineFallbackToGoogle;
+        LoadEngineFields(name);
+    }
+
+    /// <summary>Shows the fields of <paramref name="engine"/>; each engine keeps its own address and key.</summary>
+    private void LoadEngineFields(string engine)
+    {
+        var s = _settings.Current;
+        bool llm = engine == EngineNames.LocalLlm;
+        bool custom = engine != EngineNames.Google;
+
+        EnginePanel.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        ModelPanel.Visibility = llm ? Visibility.Visible : Visibility.Collapsed;
+        EngineStatus.Text = "";
+
+        EngineCaption.Text = engine switch
+        {
+            EngineNames.LibreTranslate =>
+                "Your own LibreTranslate server, or a hosted one with its API key.",
+            EngineNames.LocalLlm =>
+                "Any OpenAI-compatible server on your PC, such as Ollama or LM Studio. "
+                + "Nothing leaves your computer; quality and speed depend on the model.",
+            _ => "Free and needs no setup. The text WinLens reads is sent to Google to be translated.",
+        };
+
+        EngineUrlBox.Text = llm ? s.LlmUrl : s.LibreTranslateUrl;
+        EngineUrlBox.Tag = llm ? "http://localhost:11434/v1" : "http://localhost:5000";
+        EngineModelBox.Text = s.LlmModel;
+        EngineKeyBox.Password = (llm ? SecretStore.Unprotect(s.LlmKeyProtected)
+                                     : SecretStore.Unprotect(s.LibreTranslateKeyProtected)) ?? "";
+    }
+
+    private void OnEngineChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        var engine = CurrentEngine;
+        _settings.Current.TranslationEngine = engine;
+        _settings.Save(_settings.Current);
+
+        _suppressEvents = true;
+        LoadEngineFields(engine);
+        _suppressEvents = false;
+        _onEngineChanged();
+    }
+
+    /// <summary>Copies the visible fields into the settings of the selected engine.</summary>
+    private bool StoreEngineFields()
+    {
+        var s = _settings.Current;
+        var engine = CurrentEngine;
+        if (engine == EngineNames.Google) return false;
+
+        var url = EngineUrlBox.Text.Trim();
+        var key = EngineKeyBox.Password.Trim();
+        bool changed;
+        if (engine == EngineNames.LocalLlm)
+        {
+            var model = EngineModelBox.Text.Trim();
+            changed = url != s.LlmUrl || model != s.LlmModel || key != (SecretStore.Unprotect(s.LlmKeyProtected) ?? "");
+            s.LlmUrl = url.Length == 0 ? "http://localhost:11434/v1" : url;
+            s.LlmModel = model;
+            if (changed) s.LlmKeyProtected = SecretStore.Protect(key);
+        }
+        else
+        {
+            changed = url != s.LibreTranslateUrl || key != (SecretStore.Unprotect(s.LibreTranslateKeyProtected) ?? "");
+            s.LibreTranslateUrl = url;
+            if (changed) s.LibreTranslateKeyProtected = SecretStore.Protect(key);
+        }
+        return changed;
+    }
+
+    private void OnEngineFieldCommitted(object sender, RoutedEventArgs e) => CommitEngineFields();
+
+    private void CommitEngineFields()
+    {
+        if (_suppressEvents || !StoreEngineFields()) return;
+        _settings.Save(_settings.Current);
+        EngineStatus.Text = "";
+        _onEngineChanged();
+    }
+
+    private void OnFallbackToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        _settings.Current.EngineFallbackToGoogle = FallbackToggle.IsChecked == true;
+        _settings.Save(_settings.Current);
+        _onEngineChanged();
+    }
+
+    private async void OnTestEngine(object sender, RoutedEventArgs e)
+    {
+        if (StoreEngineFields())
+        {
+            _settings.Save(_settings.Current);
+            _onEngineChanged();
+        }
+
+        TestEngineButton.IsEnabled = false;
+        EngineStatus.Foreground = (Brush)FindResource("TextSubtleBrush");
+        EngineStatus.Text = "Testing…";
+        try
+        {
+            var result = await _onTestEngine(_settings.Current.ToEngineOptions());
+            if (result.Ok)
+            {
+                EngineStatus.Foreground = (Brush)FindResource("SuccessBrush");
+                var model = result.Model != null && EngineModelBox.Text.Trim().Length == 0
+                    ? $" Using {result.Model}." : "";
+                EngineStatus.Text = $"Works: \u201c{result.Sample}\u201d.{model}";
+            }
+            else
+            {
+                EngineStatus.Foreground = (Brush)FindResource("DangerBrush");
+                EngineStatus.Text = result.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            EngineStatus.Foreground = (Brush)FindResource("DangerBrush");
+            EngineStatus.Text = ex.Message;
+        }
+        finally
+        {
+            TestEngineButton.IsEnabled = true;
+        }
     }
 
     // ---------------- Source (OCR) language ----------------

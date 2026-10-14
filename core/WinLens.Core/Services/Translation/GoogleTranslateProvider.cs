@@ -56,7 +56,7 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
             else batchable.Add(i);
         }
 
-        var work = Chunk(batchable, items)
+        var work = Batching.Chunk(batchable, i => items[i].Text.Length, MaxBatchChars, MaxBatchLines)
             .Select(chunk => chunk.Count == 1
                 ? TranslateOneAsync(items, chunk[0], target, results, ct)
                 : TranslateBatchAsync(items, chunk, target, results, ct))
@@ -64,25 +64,6 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
             .ToArray();
         await Task.WhenAll(work);
         return results;
-    }
-
-    private static IEnumerable<List<int>> Chunk(List<int> indexes, IReadOnlyList<TranslationRequest> items)
-    {
-        var chunk = new List<int>();
-        int chars = 0;
-        foreach (var i in indexes)
-        {
-            int len = items[i].Text.Length + 1;
-            if (chunk.Count > 0 && (chars + len > MaxBatchChars || chunk.Count >= MaxBatchLines))
-            {
-                yield return chunk;
-                chunk = new List<int>();
-                chars = 0;
-            }
-            chunk.Add(i);
-            chars += len;
-        }
-        if (chunk.Count > 0) yield return chunk;
     }
 
     private async Task TranslateOneAsync(

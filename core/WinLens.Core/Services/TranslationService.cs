@@ -11,14 +11,19 @@ using WinLens.Services.Translation;
 namespace WinLens.Services;
 
 /// <summary>
-/// Translates OCR lines. Tries Google gtx first (auto source detection, a whole screen per
-/// request), then MyMemory for whatever Google could not translate. No account or key is
-/// needed for either. Logs each failure to %TEMP%\winlens.log.
+/// Translates OCR lines. By default it tries Google gtx first (auto source detection, a
+/// whole screen per request), then MyMemory for whatever Google could not translate; no
+/// account or key is needed for either. <see cref="Configure"/> switches to a LibreTranslate
+/// server or a local model instead. Logs each failure to %TEMP%\winlens.log.
 /// </summary>
 public sealed class TranslationService : IDisposable
 {
+    private const string TestPhrase = "Hello, how are you?";
+
     private readonly TranslationHttp _http;
-    private readonly IReadOnlyList<ITranslationProvider> _providers;
+    // Local models can take a while per batch and usually serve one request at a time.
+    private readonly TranslationHttp _slowHttp;
+    private volatile ITranslationProvider[] _providers;
     private readonly ConcurrentDictionary<(string text, string tgt), string> _cache = new();
     private const int MaxCacheEntries = 2000;
 
@@ -27,11 +32,51 @@ public sealed class TranslationService : IDisposable
     internal TranslationService(HttpMessageHandler? handler, string? logPath = null)
     {
         _http = new TranslationHttp(handler, logPath);
-        _providers = new ITranslationProvider[]
+        _slowHttp = new TranslationHttp(handler, logPath, TimeSpan.FromSeconds(120), maxConcurrent: 1);
+        _providers = BuildChain(EngineOptions.Default);
+    }
+
+    /// <summary>Switches engine. Translations already running finish on the old one.</summary>
+    public void Configure(EngineOptions options)
+    {
+        _providers = BuildChain(options);
+        // Translations from another engine shouldn't answer for this one.
+        _cache.Clear();
+    }
+
+    private ITranslationProvider[] BuildChain(EngineOptions options)
+    {
+        var google = new ITranslationProvider[] { new GoogleTranslateProvider(_http), new MyMemoryProvider(_http) };
+        ITranslationProvider? chosen = options.Engine switch
         {
-            new GoogleTranslateProvider(_http),
-            new MyMemoryProvider(_http),
+            TranslationEngine.LibreTranslate => new LibreTranslateProvider(_http, options.Url, options.ApiKey),
+            TranslationEngine.LocalLlm => new OpenAiCompatibleProvider(_slowHttp, options.Url, options.ApiKey, options.Model),
+            _ => null,
         };
+        if (chosen == null) return google;
+        return options.FallbackToGoogle ? google.Prepend(chosen).ToArray() : new[] { chosen };
+    }
+
+    /// <summary>
+    /// Translates a short phrase with <paramref name="options"/> (not the active engine),
+    /// for the settings window's "Test connection" button.
+    /// </summary>
+    public async Task<EngineTestResult> TestAsync(EngineOptions options, string targetLang, CancellationToken ct = default)
+    {
+        var tgt = NormalizeTarget(targetLang);
+        switch (options.Engine)
+        {
+            case TranslationEngine.LibreTranslate:
+                return await new LibreTranslateProvider(_http, options.Url, options.ApiKey).TestAsync(TestPhrase, tgt, ct);
+            case TranslationEngine.LocalLlm:
+                return await new OpenAiCompatibleProvider(_slowHttp, options.Url, options.ApiKey, options.Model).TestAsync(TestPhrase, tgt, ct);
+            default:
+                var result = await new GoogleTranslateProvider(_http).TranslateAsync(
+                    new[] { new TranslationRequest(TestPhrase, null) }, tgt, ct);
+                return result[0] is string sample
+                    ? new EngineTestResult(true, "Connected.", sample)
+                    : new EngineTestResult(false, "Google didn't answer. Check your connection.");
+        }
     }
 
     /// <summary>Translates one line; the input comes back unchanged if every backend fails.</summary>
@@ -80,7 +125,7 @@ public sealed class TranslationService : IDisposable
             list.Add(i);
         }
 
-        foreach (var provider in _providers)
+        foreach (var provider in _providers) // a snapshot: Configure swaps the array
         {
             if (pending.Count == 0)
                 break;
@@ -126,5 +171,9 @@ public sealed class TranslationService : IDisposable
         _cache[key] = value;
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        _http.Dispose();
+        _slowHttp.Dispose();
+    }
 }
