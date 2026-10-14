@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FILES: WinLens.exe WinLens-win-x64-standalone.zip WinLens-win-arm64.exe WinLens-win-arm64-standalone.zip
+
 jobs:
   build:
     name: build (${{ matrix.rid }})
@@ -45,7 +48,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Copy-Item publish-fd/WinLens.exe "dist/WinLens-${{ matrix.rid }}.exe"
+          # The x64 exe keeps the plain name every release has used; arm64 says what it is.
+          $exe = if ("${{ matrix.rid }}" -eq "win-x64") { "WinLens.exe" } else { "WinLens-${{ matrix.rid }}.exe" }
+          Copy-Item publish-fd/WinLens.exe "dist/$exe"
           Compress-Archive -Path publish-sc/* -DestinationPath "dist/WinLens-${{ matrix.rid }}-standalone.zip"
 
       - uses: actions/upload-artifact@v4
@@ -76,9 +81,6 @@ jobs:
         env:
           V: ${{ steps.v.outputs.version }}
         run: |
-          # Earlier releases shipped a plain WinLens.exe; keep that name working for old links.
-          cp dist/WinLens-win-x64.exe dist/WinLens.exe
-
           section=$(awk -v v="$V" '
             $0 ~ "^## \\[" v "\\]" { on = 1; next }
             on && /^## \[/ { exit }
@@ -92,9 +94,9 @@ jobs:
             echo "## WinLens v$V"
             echo "$section"
             echo
-            echo "**Install:** most PCs want \`WinLens-win-x64.exe\` (needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0))."
+            echo "**Install:** download \`WinLens.exe\` and run it. Needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)."
             echo "For no install at all, take \`WinLens-win-x64-standalone.zip\`, extract it and run \`WinLens.exe\` inside."
-            echo "Snapdragon / ARM devices: the \`win-arm64\` files. \`WinLens.exe\` is the same as \`WinLens-win-x64.exe\`, kept for old links."
+            echo "Snapdragon / ARM devices: the \`win-arm64\` files."
             echo
             echo "---"
             echo
@@ -102,7 +104,7 @@ jobs:
             echo
             echo "| File | SHA256 |"
             echo "| --- | --- |"
-            for f in WinLens-win-x64.exe WinLens-win-x64-standalone.zip WinLens-win-arm64.exe WinLens-win-arm64-standalone.zip WinLens.exe; do
+            for f in $FILES; do
               echo "| \`$f\` | \`$(sha256sum "dist/$f" | cut -d' ' -f1)\` |"
             done
             echo
@@ -117,7 +119,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.v.outputs.version }}
         run: |
-          gh release create "v$V" --title "WinLens v$V" --notes-file notes.md --target "$GITHUB_SHA" \
-            dist/WinLens-win-x64.exe dist/WinLens-win-x64-standalone.zip \
-            dist/WinLens-win-arm64.exe dist/WinLens-win-arm64-standalone.zip \
-            dist/WinLens.exe
+          cd dist
+          if gh release view "v$V" >/dev/null 2>&1; then
+            # Re-running for a published version refreshes its notes and files, and drops
+            # files that are no longer built.
+            gh release edit "v$V" --title "WinLens v$V" --notes-file ../notes.md
+            gh release upload "v$V" $FILES --clobber
+            for a in $(gh release view "v$V" --json assets --jq '.assets[].name'); do
+              case " $FILES " in *" $a "*) ;; *) gh release delete-asset "v$V" "$a" --yes ;; esac
+            done
+          else
+            gh release create "v$V" --title "WinLens v$V" --notes-file ../notes.md --target "$GITHUB_SHA" $FILES
+          fi

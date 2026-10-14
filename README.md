@@ -98,13 +98,12 @@ to be translated. Screenshots themselves never leave your PC.
 
 ### Download
 
-Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page and pick the
-build for your CPU (`win-x64` for most PCs, `win-arm64` for Snapdragon / ARM devices). Two
-flavours are offered:
+Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page. Most PCs want
+`WinLens.exe`; Snapdragon / ARM devices take the `win-arm64` files. Two flavours are offered:
 
 | Download | Size | Needs a runtime? |
 | --- | --- | --- |
-| `WinLens-win-x64.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `WinLens.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | `WinLens-win-x64-standalone.zip` | ~75 MB | No — the runtime is bundled |
 
 Pick the small `.exe` if you already have (or don't mind installing) the .NET 10 Desktop
@@ -117,7 +116,7 @@ The executable isn't code-signed yet, so on first launch Windows SmartScreen may
 download instead, compare its checksum against the SHA256 listed on the release page:
 
 ```powershell
-Get-FileHash .\WinLens-win-x64.exe -Algorithm SHA256
+Get-FileHash .\WinLens.exe -Algorithm SHA256
 ```
 
 ### OCR language packs
