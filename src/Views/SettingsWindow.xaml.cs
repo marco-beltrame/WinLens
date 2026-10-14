@@ -337,6 +337,7 @@ public partial class SettingsWindow : Window
         _capturing = !region;
         _capturingRegion = region;
         HotkeyMessage.Visibility = Visibility.Collapsed;
+        RegionHotkeyMessage.Visibility = Visibility.Collapsed;
 
         // Suspend the global shortcuts so WM_HOTKEY doesn't eat the key being bound —
         // without this the user could never re-bind a combination to itself, or type the
@@ -370,6 +371,7 @@ public partial class SettingsWindow : Window
         _capturing = false;
         _capturingRegion = false;
         HotkeyMessage.Visibility = Visibility.Collapsed;
+        RegionHotkeyMessage.Visibility = Visibility.Collapsed;
 
         var idle = (Brush)FindResource("BorderBrush");
         HotkeyChip.BorderBrush = idle;
@@ -465,8 +467,13 @@ public partial class SettingsWindow : Window
 
     private void ShowHotkeyMessage(string text)
     {
-        HotkeyMessage.Text = text;
-        HotkeyMessage.Visibility = Visibility.Visible;
+        // Under the shortcut being recorded, and scrolled into view: the window can be
+        // taller than a laptop screen, and a message below the fold looks like nothing happened.
+        var message = _capturingRegion ? RegionHotkeyMessage : HotkeyMessage;
+        message.Text = text;
+        message.Visibility = Visibility.Visible;
+        message.UpdateLayout();
+        message.BringIntoView();
     }
 
     private static HotkeyModifiers CurrentModifiers()

@@ -159,6 +159,9 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeHotkey"/>
                 </Grid>
 
+                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+
                 <!-- Shortcut (drag-selected region) -->
                 <TextBlock Text="REGION SHORTCUT" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
                 <Grid>
@@ -176,7 +179,7 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
                 </Grid>
 
-                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                <TextBlock x:Name="RegionHotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
                            Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
 
                 <!-- Launch at startup -->

@@ -111,7 +111,8 @@
                             Background="{StaticResource SurfaceAltBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">

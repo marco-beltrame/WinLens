@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -112,8 +113,24 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
         }
     }
 
-    private static bool IsSame(string a, string b) =>
-        string.Equals(a.Trim(), b.Trim(), StringComparison.Ordinal);
+    /// <summary>
+    /// True when <paramref name="b"/> is <paramref name="a"/> handed back rather than
+    /// translated. Google sometimes returns an untranslated line with its accents, spacing
+    /// or punctuation touched up, so only letters and digits are compared, without accents.
+    /// </summary>
+    internal static bool IsSame(string a, string b) =>
+        string.Equals(Skeleton(a), Skeleton(b), StringComparison.Ordinal);
+
+    private static string Skeleton(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var c in s.Normalize(NormalizationForm.FormD))
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+            if (char.IsLetterOrDigit(c)) sb.Append(c);
+        }
+        return sb.ToString();
+    }
 
     private static bool HasLetter(string s)
     {
