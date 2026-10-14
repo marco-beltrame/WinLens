@@ -56,6 +56,10 @@ public partial class SettingsWindow : Window
         Func<EngineOptions, Task<EngineTestResult>> onTestEngine)
     {
         InitializeComponent();
+
+        // A closed dropdown would otherwise switch its selection under the wheel (changing
+        // engine or language by accident while scrolling): scroll the page instead.
+        ContentScroll.AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnContentWheel), true);
         // From the assembly, so the footer can't fall behind the release again.
         var version = typeof(SettingsWindow).Assembly.GetName().Version;
         if (version != null) FooterText.Text = $"WinLens v{version.ToString(3)}";
@@ -461,6 +465,21 @@ public partial class SettingsWindow : Window
                 $"Windows would not give WinLens {name} — another app is "
                 + "already using it.\n\nThe previous shortcut is still active.",
                 "WinLens", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnContentWheel(object sender, MouseWheelEventArgs e)
+    {
+        for (var d = e.OriginalSource as DependencyObject; d != null && d != ContentScroll;
+             d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+        {
+            if (d is ComboBox combo)
+            {
+                if (combo.IsDropDownOpen) return; // the open list scrolls itself
+                e.Handled = true;
+                ContentScroll.ScrollToVerticalOffset(ContentScroll.VerticalOffset - e.Delta / 3.0);
+                return;
+            }
         }
     }
 

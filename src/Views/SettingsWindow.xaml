@@ -50,7 +50,7 @@
             <!-- ============== Content ============== -->
             <!-- Scrolls so the window still works on a short display (the settings list
                  grew past what fits on a 768 px laptop screen). -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="ContentScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="22,6,22,20">
 
