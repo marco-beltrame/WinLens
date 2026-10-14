@@ -8,6 +8,7 @@ using WinLens.Layout;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
+using WinLens.Services.Translation;
 using DRectangle = System.Drawing.Rectangle;
 
 namespace WinLens.Views;
@@ -357,11 +358,11 @@ public partial class MainWindow : Window, IDisposable
 
     private async Task TranslateBlocksAsync(System.Collections.Generic.List<OcrBlock> blocks, string target)
     {
-        await Task.WhenAll(blocks.Select(async b =>
-        {
-            b.TranslatedText = await _translator.TranslateAsync(
-                b.OriginalText, target, b.DetectedLanguage);
-        }));
+        var translated = await _translator.TranslateManyAsync(
+            blocks.Select(b => new TranslationRequest(b.OriginalText, b.DetectedLanguage)).ToArray(),
+            target);
+        for (int i = 0; i < blocks.Count; i++)
+            blocks[i].TranslatedText = translated[i];
     }
 
     /// <summary>

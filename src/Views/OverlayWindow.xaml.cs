@@ -17,6 +17,7 @@ using System.Windows.Threading;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
+using WinLens.Services.Translation;
 using DBitmap = System.Drawing.Bitmap;
 using DRectangle = System.Drawing.Rectangle;
 // System.Drawing.Imaging and System.Windows.Media both define PixelFormat; alias the
@@ -208,16 +209,18 @@ public partial class OverlayWindow : Window
 
     private async Task RetranslateAllAsync(string target, CancellationToken ct)
     {
-        var tasks = _blocks.Select(async b =>
+        var translated = await _translator.TranslateManyAsync(
+            _blocks.Select(b => new TranslationRequest(b.OriginalText, b.DetectedLanguage)).ToArray(),
+            target, ct);
+        // Results arrive on the UI thread; drop them once a newer request has started.
+        ct.ThrowIfCancellationRequested();
+        for (int i = 0; i < _blocks.Count; i++)
         {
-            var translated = await _translator.TranslateAsync(b.OriginalText, target, b.DetectedLanguage, ct);
-            // Results arrive on the UI thread; drop them once a newer request has started.
-            ct.ThrowIfCancellationRequested();
-            b.TranslatedText = translated;
+            var b = _blocks[i];
+            b.TranslatedText = translated[i];
             if (_textBoxes.TryGetValue(b, out var tb))
-                ApplyText(tb, translated);
-        }).ToArray();
-        await Task.WhenAll(tasks);
+                ApplyText(tb, translated[i]);
+        }
     }
 
     private void BuildOverlayBoxes()
