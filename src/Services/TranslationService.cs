@@ -43,10 +43,6 @@ public sealed class TranslationService : IDisposable
         string? sourceLang = null,
         CancellationToken ct = default)
     {
-        // sourceLang from the OCR engine is the engine's profile language, not
-        // the actual content language. Ignore it — let Google auto-detect.
-        _ = sourceLang;
-
         if (string.IsNullOrWhiteSpace(text))
             return text;
 
@@ -69,8 +65,8 @@ public sealed class TranslationService : IDisposable
                 return google;
             }
 
-            // MyMemory fallback — has no auto-detect, default source to English.
-            var memory = await TryMyMemoryAsync(text, "en", tgt, ct);
+            // MyMemory fallback — it has no auto-detect, so we must name the source.
+            var memory = await TryMyMemoryAsync(text, GuessSource(text, sourceLang), tgt, ct);
             if (memory != null)
             {
                 Store(key, memory);
@@ -96,6 +92,47 @@ public sealed class TranslationService : IDisposable
             if (string.Equals(code, targetLang, StringComparison.OrdinalIgnoreCase))
                 return code;
         return targetLang.Split('-')[0];
+    }
+
+    /// <summary>
+    /// Best guess at the source language for the MyMemory fallback, which has no
+    /// auto-detect and silently echoes the input back when told the wrong pair.
+    /// Hard-coding "en" here used to make the fallback useless for exactly the case
+    /// WinLens exists for — a page of Chinese sent as en→xx comes back unchanged, so
+    /// a Google rate-limit looked to the user like "it stopped translating".
+    /// <para>
+    /// The script is read off the text itself, which is reliable for CJK: kana means
+    /// Japanese, Hangul means Korean, otherwise Han means Chinese. For Latin text the
+    /// script says nothing about the language, so we fall back to the OCR recognizer's
+    /// tag (a weak signal — it is the installed pack, not the content) and finally "en".
+    /// </para>
+    /// </summary>
+    private static string GuessSource(string text, string? ocrTag)
+    {
+        int han = 0, kana = 0, hangul = 0, latin = 0;
+        foreach (var c in text)
+        {
+            if (c >= 0x3040 && c <= 0x30FF) kana++;
+            else if (c >= 0xAC00 && c <= 0xD7AF) hangul++;
+            else if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)) han++;
+            else if (char.IsLetter(c)) latin++;
+        }
+
+        // Kana and Hangul are decisive even in small amounts: Japanese mixes kana into
+        // Han text, so requiring a majority would misread most Japanese as Chinese.
+        if (kana > 0) return "ja";
+        if (hangul > 0) return "ko";
+        if (han > latin) return "zh";
+
+        if (!string.IsNullOrWhiteSpace(ocrTag))
+        {
+            var baseTag = ocrTag.Split('-')[0];
+            // The text is Latin here, so a CJK recognizer tag is simply the wrong
+            // answer (it happens: the CJK engine also returns the Latin lines it sees).
+            bool tagIsCjk = baseTag is "zh" or "ja" or "ko";
+            if (!tagIsCjk && baseTag.Length is 2 or 3) return baseTag;
+        }
+        return "en";
     }
 
     private void Store((string text, string tgt) key, string value)
@@ -184,12 +221,41 @@ public sealed class TranslationService : IDisposable
         }
     }
 
+    // Bound the log the same way App does for crash.log. A backend that is down or
+    // rate-limiting writes one line per text block per translate, so an unbounded file
+    // grows fast and unattended.
+    private const long MaxLogBytes = 256 * 1024;
+    private readonly object _logLock = new();
+    private long _logBytes = -1; // -1 = size not read from disk yet
+
     private void Log(string line)
     {
         try
         {
-            File.AppendAllText(_logPath,
-                $"[{DateTime.Now:HH:mm:ss.fff}] {line}{Environment.NewLine}");
+            var entry = $"[{DateTime.Now:HH:mm:ss.fff}] {line}{Environment.NewLine}";
+
+            // Up to _gate translations run at once and each may log; AppendAllText opens
+            // the file exclusively, so without this they would trip over each other.
+            lock (_logLock)
+            {
+
+                if (_logBytes < 0)
+                {
+                    var info = new FileInfo(_logPath);
+                    _logBytes = info.Exists ? info.Length : 0;
+                }
+
+                if (_logBytes + entry.Length > MaxLogBytes)
+                {
+                    // Start fresh rather than grow forever. Tracking the size in memory
+                    // keeps this to one stat() per process instead of one per line.
+                    File.Delete(_logPath);
+                    _logBytes = 0;
+                }
+
+                File.AppendAllText(_logPath, entry);
+                _logBytes += entry.Length;
+            }
         }
         catch { /* logging must never throw */ }
     }

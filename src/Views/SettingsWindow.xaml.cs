@@ -23,17 +23,31 @@ public partial class SettingsWindow : Window
 {
     private readonly SettingsService _settings;
     private readonly Action _onTranslate;
-    private readonly Action _onHotkeyChanged;
+
+    /// <summary>
+    /// Applies a shortcut pair and reports whether the OS accepted it. Returns false when
+    /// the change was refused and rolled back, so the UI can say so instead of showing a
+    /// binding that does nothing.
+    /// </summary>
+    private readonly Func<HotkeyModifiers, Key, HotkeyModifiers, Key, bool> _onApplyHotkeys;
+
+    private readonly Action<bool> _onHotkeyCapturePaused;
 
     private bool _suppressEvents;
     private bool _capturing;
+    private bool _capturingRegion;
 
-    public SettingsWindow(SettingsService settings, Action onTranslate, Action onHotkeyChanged)
+    public SettingsWindow(
+        SettingsService settings,
+        Action onTranslate,
+        Func<HotkeyModifiers, Key, HotkeyModifiers, Key, bool> onApplyHotkeys,
+        Action<bool> onHotkeyCapturePaused)
     {
         InitializeComponent();
         _settings = settings;
         _onTranslate = onTranslate;
-        _onHotkeyChanged = onHotkeyChanged;
+        _onApplyHotkeys = onApplyHotkeys;
+        _onHotkeyCapturePaused = onHotkeyCapturePaused;
 
         _suppressEvents = true;
 
@@ -42,11 +56,19 @@ public partial class SettingsWindow : Window
 
         StartupToggle.IsChecked = StartupRegistration.IsEnabled();
         UpdateHotkeyText();
+        UpdateRegionHotkeyText();
 
         _suppressEvents = false;
 
         PreviewKeyDown += OnWindowPreviewKeyDown;
         IsVisibleChanged += OnVisibleChanged;
+        Closing += (_, _) =>
+        {
+            // Resume the global shortcuts if the window is closed mid-capture, otherwise
+            // they would stay suspended for the rest of the session.
+            if (_capturing || _capturingRegion)
+                _onHotkeyCapturePaused(false);
+        };
     }
 
     // Refresh installed OCR languages each time the window is shown
@@ -134,29 +156,64 @@ public partial class SettingsWindow : Window
     private void OnChangeHotkey(object sender, RoutedEventArgs e)
     {
         if (_capturing) { EndCapture(); return; }
-        BeginCapture();
+        BeginCapture(region: false);
     }
 
-    private void BeginCapture()
+    private void OnChangeRegionHotkey(object sender, RoutedEventArgs e)
     {
-        _capturing = true;
-        HotkeyText.Text = "Press keys…";
-        HotkeyChip.BorderBrush = (Brush)FindResource("AccentBrush");
-        ChangeHotkeyButton.Content = "Cancel";
+        if (_capturingRegion) { EndCapture(); return; }
+        BeginCapture(region: true);
+    }
+
+    private void BeginCapture(bool region)
+    {
+        EndCapture(); // cancel the other chip if it was already capturing
+
+        _capturing = !region;
+        _capturingRegion = region;
+
+        // Suspend the global shortcuts so WM_HOTKEY doesn't eat the key being bound —
+        // without this the user could never re-bind a combination to itself, or type the
+        // other action's combination to swap them.
+        _onHotkeyCapturePaused(true);
+
+        var accent = (Brush)FindResource("AccentBrush");
+        if (region)
+        {
+            RegionHotkeyText.Text = "Press keys…";
+            RegionHotkeyChip.BorderBrush = accent;
+            ChangeRegionHotkeyButton.Content = "Cancel";
+        }
+        else
+        {
+            HotkeyText.Text = "Press keys…";
+            HotkeyChip.BorderBrush = accent;
+            ChangeHotkeyButton.Content = "Cancel";
+        }
         Focus();
     }
 
     private void EndCapture()
     {
+        bool wasCapturing = _capturing || _capturingRegion;
         _capturing = false;
-        HotkeyChip.BorderBrush = (Brush)FindResource("BorderBrush");
+        _capturingRegion = false;
+
+        var idle = (Brush)FindResource("BorderBrush");
+        HotkeyChip.BorderBrush = idle;
+        RegionHotkeyChip.BorderBrush = idle;
         ChangeHotkeyButton.Content = "Change";
+        ChangeRegionHotkeyButton.Content = "Change";
         UpdateHotkeyText();
+        UpdateRegionHotkeyText();
+
+        if (wasCapturing)
+            _onHotkeyCapturePaused(false);
     }
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (!_capturing) return;
+        if (!_capturing && !_capturingRegion) return;
         e.Handled = true;
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
@@ -167,11 +224,47 @@ public partial class SettingsWindow : Window
         var mods = CurrentModifiers();
         if (mods == HotkeyModifiers.None) return; // require at least one modifier
 
-        _settings.Current.HotkeyModifiers = mods;
-        _settings.Current.HotkeyKey = key;
-        _settings.Save(_settings.Current);
-        _onHotkeyChanged();
+        var s = _settings.Current;
+        var fullMods = s.HotkeyModifiers;
+        var fullKey = s.HotkeyKey;
+        var regionMods = s.RegionHotkeyModifiers;
+        var regionKey = s.RegionHotkeyKey;
+
+        // Pressing the combination the OTHER action already owns SWAPS the two rather
+        // than failing — the same combination can't be registered twice, and swapping is
+        // what someone trading the two shortcuts around actually means.
+        if (_capturingRegion)
+        {
+            if (mods == fullMods && key == fullKey)
+            {
+                fullMods = regionMods;
+                fullKey = regionKey;
+            }
+            regionMods = mods;
+            regionKey = key;
+        }
+        else
+        {
+            if (mods == regionMods && key == regionKey)
+            {
+                regionMods = fullMods;
+                regionKey = fullKey;
+            }
+            fullMods = mods;
+            fullKey = key;
+        }
+
+        bool applied = _onApplyHotkeys(fullMods, fullKey, regionMods, regionKey);
         EndCapture();
+
+        if (!applied)
+        {
+            MessageBox.Show(
+                this,
+                $"Windows would not give WinLens {FormatHotkey(mods, key)} — another app is "
+                + "already using it.\n\nThe previous shortcut is still active.",
+                "WinLens", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private static HotkeyModifiers CurrentModifiers()
@@ -190,16 +283,22 @@ public partial class SettingsWindow : Window
         Key.LeftShift or Key.RightShift or
         Key.LWin or Key.RWin or Key.System;
 
-    private void UpdateHotkeyText()
+    private void UpdateHotkeyText() =>
+        HotkeyText.Text = FormatHotkey(_settings.Current.HotkeyModifiers, _settings.Current.HotkeyKey);
+
+    private void UpdateRegionHotkeyText() =>
+        RegionHotkeyText.Text = FormatHotkey(
+            _settings.Current.RegionHotkeyModifiers, _settings.Current.RegionHotkeyKey);
+
+    private static string FormatHotkey(HotkeyModifiers mods, Key key)
     {
-        var s = _settings.Current;
         var parts = new List<string>();
-        if (s.HotkeyModifiers.HasFlag(HotkeyModifiers.Control)) parts.Add("Ctrl");
-        if (s.HotkeyModifiers.HasFlag(HotkeyModifiers.Alt))     parts.Add("Alt");
-        if (s.HotkeyModifiers.HasFlag(HotkeyModifiers.Shift))   parts.Add("Shift");
-        if (s.HotkeyModifiers.HasFlag(HotkeyModifiers.Win))     parts.Add("Win");
-        parts.Add(s.HotkeyKey.ToString());
-        HotkeyText.Text = string.Join("  +  ", parts);
+        if (mods.HasFlag(HotkeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(HotkeyModifiers.Alt))     parts.Add("Alt");
+        if (mods.HasFlag(HotkeyModifiers.Shift))   parts.Add("Shift");
+        if (mods.HasFlag(HotkeyModifiers.Win))     parts.Add("Win");
+        parts.Add(key.ToString());
+        return string.Join("  +  ", parts);
     }
 
     // ---------------- Startup ----------------

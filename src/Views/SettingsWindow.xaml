@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="WinLens"
         Icon="/assets/winlens.ico"
-        Width="440" Height="694"
+        Width="440" Height="756"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -48,11 +48,15 @@
             </Grid>
 
             <!-- ============== Content ============== -->
-            <StackPanel Grid.Row="1" Margin="22,6,22,20">
+            <!-- Scrolls so the window still works on a short display (the settings list
+                 grew past what fits on a 768 px laptop screen). -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="22,6,22,20">
 
                 <TextBlock Text="Translate your screen" Style="{StaticResource H1Text}"/>
-                <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0"
-                           Text="Press your shortcut anywhere in Windows to translate on-screen text right where it sits."/>
+                <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="Press your shortcut anywhere in Windows to translate on-screen text right where it sits. It reads the monitor your cursor is on, so your other screens stay usable while the translation is open."/>
 
                 <Button x:Name="TranslateButton" Style="{StaticResource PrimaryButton}"
                         Margin="0,18,0,0" Click="OnTranslateNow">
@@ -82,8 +86,8 @@
                            Text="+ Add OCR languages in Windows…"
                            MouseLeftButtonUp="OnAddLanguages"/>
 
-                <!-- Shortcut -->
-                <TextBlock Text="SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
+                <!-- Shortcut: translates the monitor the cursor is on -->
+                <TextBlock Text="TRANSLATE SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -97,6 +101,23 @@
                     </Border>
                     <Button x:Name="ChangeHotkeyButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
                             Content="Change" Margin="10,0,0,0" Click="OnChangeHotkey"/>
+                </Grid>
+
+                <!-- Shortcut (drag-selected region) -->
+                <TextBlock Text="REGION SHORTCUT" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="RegionHotkeyChip" Grid.Column="0" Height="42" CornerRadius="10"
+                            Background="{StaticResource SurfaceAltBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                        <TextBlock x:Name="RegionHotkeyText" VerticalAlignment="Center" Margin="14,0"
+                                   Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button x:Name="ChangeRegionHotkeyButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
+                            Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
                 </Grid>
 
                 <!-- Launch at startup -->
@@ -122,6 +143,7 @@
                            HorizontalAlignment="Center"
                            Text="WinLens v1.2"/>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
     </Border>
 </Window>

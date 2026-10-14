@@ -42,6 +42,10 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        // Show/Hide rather than EnsureHandle: the tray host needs its HWND, but it also
+        // needs the Loaded event, which only fires once the window has actually been
+        // shown — that is where the tray icon and the global hotkeys are set up.
+        // The window is 1x1, transparent and Visibility=Hidden, so nothing appears.
         _main = new MainWindow();
         _main.Show();
         _main.Hide();

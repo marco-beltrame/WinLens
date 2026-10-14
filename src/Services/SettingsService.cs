@@ -29,12 +29,13 @@ public sealed class SettingsService
     public UserSettings Load()
     {
         bool loadedFromDisk = false;
+        string? onDiskJson = null;
         try
         {
             if (File.Exists(FilePath))
             {
-                var json = File.ReadAllText(FilePath);
-                var loaded = JsonSerializer.Deserialize<UserSettings>(json, Json);
+                onDiskJson = File.ReadAllText(FilePath);
+                var loaded = JsonSerializer.Deserialize<UserSettings>(onDiskJson, Json);
                 if (loaded != null)
                 {
                     Current = loaded;
@@ -55,6 +56,16 @@ public sealed class SettingsService
             var sys = MapToTargetCode(GetUserDisplayLanguage());
             if (!string.IsNullOrEmpty(sys))
                 Current.TargetLanguage = sys;
+        }
+        else
+        {
+            // Drop properties left over from older versions, and materialise ones added
+            // since (e.g. the region hotkey), so the file on disk always mirrors the
+            // current model. Only rewrite when it actually differs — otherwise every
+            // launch would touch the file for nothing.
+            var canonical = JsonSerializer.Serialize(Current, Json);
+            if (canonical != onDiskJson)
+                WriteAtomic(canonical);
         }
 
         LoadedFromDisk = loadedFromDisk;
@@ -116,15 +127,34 @@ public sealed class SettingsService
     public void Save(UserSettings settings)
     {
         Current = settings;
+        WriteAtomic(JsonSerializer.Serialize(settings, Json));
+    }
+
+    /// <summary>
+    /// Writes settings.json via a temp file + replace, so an interrupted write can never
+    /// leave truncated JSON behind. That matters more than it looks: <see cref="Load"/>
+    /// treats unparseable JSON as "first run", which would silently reset the user's
+    /// language and shortcuts and pop the settings window on the next launch.
+    /// Best-effort throughout — Save runs from UI event handlers and a locked or full
+    /// disk must not take the app down; the in-memory settings stay applied either way.
+    /// </summary>
+    private static void WriteAtomic(string json)
+    {
         try
         {
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(settings, Json));
+            var tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, json);
+
+            if (File.Exists(FilePath))
+                File.Replace(tmp, FilePath, null);
+            else
+                File.Move(tmp, FilePath);
         }
         catch
         {
-            // Best-effort: Save runs from UI event handlers, and a locked/full disk
-            // must not take the whole app down. In-memory settings stay applied.
+            // Clean up a half-written temp file so it can't accumulate.
+            try { File.Delete(FilePath + ".tmp"); } catch { /* nothing more to do */ }
         }
     }
 }

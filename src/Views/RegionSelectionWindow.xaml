@@ -1,0 +1,39 @@
+<Window x:Class="WinLens.Views.RegionSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        Cursor="Cross"
+        UseLayoutRounding="True">
+    <Canvas x:Name="Root" Background="Transparent">
+        <Rectangle x:Name="DimTop"    Fill="#80000000"/>
+        <Rectangle x:Name="DimBottom" Fill="#80000000"/>
+        <Rectangle x:Name="DimLeft"   Fill="#80000000"/>
+        <Rectangle x:Name="DimRight"  Fill="#80000000"/>
+        <Rectangle x:Name="SelectionRect"
+                   Stroke="#7B6CF6"
+                   StrokeThickness="2"
+                   Fill="Transparent"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False"/>
+        <Border x:Name="SizeChip"
+                Background="#CC0E0F13"
+                BorderBrush="#3A4150"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="6,3"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <TextBlock x:Name="SizeText"
+                       Foreground="#ECEEF3"
+                       FontFamily="Segoe UI"
+                       FontSize="11"
+                       FontWeight="SemiBold"/>
+        </Border>
+    </Canvas>
+</Window>

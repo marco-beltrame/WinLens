@@ -85,19 +85,30 @@ public sealed class OcrService
             // mixed screens (e.g. a Chinese bubble among Latin UI): the Latin engine
             // contributes the Latin text, the CJK engine the CJK text. A single engine
             // can't do both, so we union the appropriate parts and dedup overlaps.
+            // ONE recognizer per script is enough, and that cap matters: each engine makes
+            // a full pass over an image of up to MaxPixels, so a desktop with en-US, it-IT
+            // and fr-FR installed used to run three Latin passes whose extra blocks
+            // IsAppropriate keeps and DedupOverlaps then discards — pure cost. The user's
+            // profile engine is offered first so it wins its own bucket.
             var engines = new List<OcrEngine>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var covered = new HashSet<Script>();
 
             void Add(OcrEngine? e)
             {
                 if (e == null) return;
-                var tag = e.RecognizerLanguage?.LanguageTag ?? Guid.NewGuid().ToString();
-                if (seen.Add(tag)) engines.Add(e);
+                if (covered.Add(ScriptOfTag(e.RecognizerLanguage?.LanguageTag)))
+                    engines.Add(e);
             }
 
             Add(OcrEngine.TryCreateFromUserProfileLanguages());
             foreach (var lang in OcrEngine.AvailableRecognizerLanguages)
+            {
+                if (covered.Count == ScriptCount) break; // every bucket filled
+                // Check the tag before building the engine — creating one we would
+                // immediately discard is wasted work.
+                if (covered.Contains(ScriptOfTag(lang.LanguageTag))) continue;
                 Add(OcrEngine.TryCreateFromLanguage(lang));
+            }
 
             // Run the recognizers concurrently. Each pass over the (upscaled) bitmap is
             // independent and read-only, so wall-time is the slowest engine, not their sum.
@@ -248,6 +259,8 @@ public sealed class OcrService
     }
 
     private enum Script { Latin, Cjk }
+
+    private static readonly int ScriptCount = Enum.GetValues<Script>().Length;
 
     private static Script ScriptOfTag(string? tag)
     {
