@@ -19,17 +19,20 @@ public sealed class LanguageOption
     public string Label { get; init; } = "";
 }
 
+/// <summary>Outcome of applying a shortcut pair: which side the OS refused, if any.</summary>
+public readonly record struct HotkeyApplyResult(bool Ok, bool FullFailed, bool RegionFailed);
+
 public partial class SettingsWindow : Window
 {
     private readonly SettingsService _settings;
     private readonly Action _onTranslate;
 
     /// <summary>
-    /// Applies a shortcut pair and reports whether the OS accepted it. Returns false when
-    /// the change was refused and rolled back, so the UI can say so instead of showing a
-    /// binding that does nothing.
+    /// Applies a shortcut pair and reports whether the OS accepted it. A refused change is
+    /// rolled back and the result says which side failed, so the UI can name the right
+    /// combination instead of showing a binding that does nothing.
     /// </summary>
-    private readonly Func<HotkeyModifiers, Key, HotkeyModifiers, Key, bool> _onApplyHotkeys;
+    private readonly Func<HotkeyModifiers, Key, HotkeyModifiers, Key, HotkeyApplyResult> _onApplyHotkeys;
 
     private readonly Action<bool> _onHotkeyCapturePaused;
 
@@ -40,7 +43,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         SettingsService settings,
         Action onTranslate,
-        Func<HotkeyModifiers, Key, HotkeyModifiers, Key, bool> onApplyHotkeys,
+        Func<HotkeyModifiers, Key, HotkeyModifiers, Key, HotkeyApplyResult> onApplyHotkeys,
         Action<bool> onHotkeyCapturePaused)
     {
         InitializeComponent();
@@ -54,7 +57,7 @@ public partial class SettingsWindow : Window
         RebuildLanguageOptions();
         BuildSourceOptions();
 
-        StartupToggle.IsChecked = StartupRegistration.IsEnabled();
+        RefreshStartupToggle();
         UpdateHotkeyText();
         UpdateRegionHotkeyText();
 
@@ -62,6 +65,10 @@ public partial class SettingsWindow : Window
 
         PreviewKeyDown += OnWindowPreviewKeyDown;
         IsVisibleChanged += OnVisibleChanged;
+        // Leaving the window (focus lost, minimized, hidden) must not leave the global
+        // shortcuts suspended while a capture is half-done.
+        Deactivated += (_, _) => EndCaptureIfActive();
+        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) EndCaptureIfActive(); };
         Closing += (_, _) =>
         {
             // Resume the global shortcuts if the window is closed mid-capture, otherwise
@@ -75,10 +82,11 @@ public partial class SettingsWindow : Window
     // (so a language added via Windows settings appears without restart).
     private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.NewValue is not true) return;
+        if (e.NewValue is not true) { EndCaptureIfActive(); return; }
         _suppressEvents = true;
         RebuildLanguageOptions(); // float most-recent targets to the top
         BuildSourceOptions();
+        RefreshStartupToggle(); // may have changed via Task Manager / Windows Settings
         _suppressEvents = false;
     }
 
@@ -146,6 +154,7 @@ public partial class SettingsWindow : Window
 
     private async void OnTranslateNow(object sender, RoutedEventArgs e)
     {
+        EndCaptureIfActive(); // resume the global shortcuts before leaving
         Hide();
         await Task.Delay(160); // let the window vanish before the screenshot
         _onTranslate();
@@ -171,6 +180,7 @@ public partial class SettingsWindow : Window
 
         _capturing = !region;
         _capturingRegion = region;
+        HotkeyMessage.Visibility = Visibility.Collapsed;
 
         // Suspend the global shortcuts so WM_HOTKEY doesn't eat the key being bound —
         // without this the user could never re-bind a combination to itself, or type the
@@ -193,11 +203,17 @@ public partial class SettingsWindow : Window
         Focus();
     }
 
+    private void EndCaptureIfActive()
+    {
+        if (_capturing || _capturingRegion) EndCapture();
+    }
+
     private void EndCapture()
     {
         bool wasCapturing = _capturing || _capturingRegion;
         _capturing = false;
         _capturingRegion = false;
+        HotkeyMessage.Visibility = Visibility.Collapsed;
 
         var idle = (Brush)FindResource("BorderBrush");
         HotkeyChip.BorderBrush = idle;
@@ -216,13 +232,31 @@ public partial class SettingsWindow : Window
         if (!_capturing && !_capturingRegion) return;
         e.Handled = true;
 
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        // Under an IME or after a dead key the real key hides in ImeProcessedKey /
+        // DeadCharProcessedKey; the placeholder itself is not a usable shortcut key.
+        var key = e.Key switch
+        {
+            Key.System => e.SystemKey,
+            Key.ImeProcessed => e.ImeProcessedKey,
+            Key.DeadCharProcessed => e.DeadCharProcessedKey,
+            _ => e.Key,
+        };
 
         if (key == Key.Escape) { EndCapture(); return; }
-        if (IsModifier(key)) return; // wait for the trigger key
+        if (key == Key.None || IsModifier(key)) return; // wait for the trigger key
 
         var mods = CurrentModifiers();
-        if (mods == HotkeyModifiers.None) return; // require at least one modifier
+        var check = HotkeyRules.Validate((uint)mods, key.ToString());
+        if (check != HotkeyCheck.Ok)
+        {
+            ShowHotkeyMessage(check switch
+            {
+                HotkeyCheck.NeedsModifier => "Hold Ctrl, Alt or Win together with the key.",
+                HotkeyCheck.Reserved => $"{FormatHotkey(mods, key)} is a common system shortcut. Try another.",
+                _ => "That key can't be used. Try another.",
+            });
+            return; // keep capturing
+        }
 
         var s = _settings.Current;
         var fullMods = s.HotkeyModifiers;
@@ -254,17 +288,29 @@ public partial class SettingsWindow : Window
             fullKey = key;
         }
 
-        bool applied = _onApplyHotkeys(fullMods, fullKey, regionMods, regionKey);
+        var result = _onApplyHotkeys(fullMods, fullKey, regionMods, regionKey);
         EndCapture();
 
-        if (!applied)
+        if (!result.Ok)
         {
+            // Name the combination the OS actually refused (with a swap it may be the
+            // other action's, not the one just typed).
+            var failed = new List<string>();
+            if (result.FullFailed) failed.Add(FormatHotkey(fullMods, fullKey));
+            if (result.RegionFailed) failed.Add(FormatHotkey(regionMods, regionKey));
+            var name = failed.Count > 0 ? string.Join(" and ", failed) : FormatHotkey(mods, key);
             MessageBox.Show(
                 this,
-                $"Windows would not give WinLens {FormatHotkey(mods, key)} — another app is "
+                $"Windows would not give WinLens {name} — another app is "
                 + "already using it.\n\nThe previous shortcut is still active.",
                 "WinLens", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void ShowHotkeyMessage(string text)
+    {
+        HotkeyMessage.Text = text;
+        HotkeyMessage.Visibility = Visibility.Visible;
     }
 
     private static HotkeyModifiers CurrentModifiers()
@@ -303,9 +349,29 @@ public partial class SettingsWindow : Window
 
     // ---------------- Startup ----------------
 
+    /// <summary>Syncs the toggle to the real registry state without firing the change handler.</summary>
+    private void RefreshStartupToggle()
+    {
+        bool was = _suppressEvents;
+        _suppressEvents = true;
+        StartupToggle.IsChecked = StartupRegistration.IsEnabled();
+        StartupMessage.Visibility = Visibility.Collapsed;
+        _suppressEvents = was;
+    }
+
     private void OnStartupToggled(object sender, RoutedEventArgs e)
     {
         if (_suppressEvents) return;
-        StartupRegistration.SetEnabled(StartupToggle.IsChecked == true);
+        bool want = StartupToggle.IsChecked == true;
+        if (StartupRegistration.SetEnabled(want))
+        {
+            StartupMessage.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // Registry refused (policy / access denied): show what's really set.
+        RefreshStartupToggle();
+        StartupMessage.Text = "Couldn't change this setting. Windows blocked the change.";
+        StartupMessage.Visibility = Visibility.Visible;
     }
 }

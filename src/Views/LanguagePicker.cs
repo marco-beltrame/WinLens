@@ -41,7 +41,8 @@ internal static class LanguagePicker
             if (recents.Count > 0)
             {
                 foreach (var c in recents) box.Items.Add(Make(c));
-                box.Items.Add(new Separator());
+                // Disabled + unfocusable so arrow keys and type-to-jump skip over it.
+                box.Items.Add(new Separator { IsEnabled = false, Focusable = false, IsHitTestVisible = false });
             }
         }
 

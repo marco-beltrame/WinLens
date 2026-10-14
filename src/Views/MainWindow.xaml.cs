@@ -54,6 +54,10 @@ public partial class MainWindow : Window, IDisposable
                 + "or use this tray menu.", BalloonIcon.Warning);
         }
 
+        if (_settings.HotkeysWereReset)
+            Tray.ShowBalloonTip("WinLens",
+                "A saved shortcut wasn't valid and was reset to its default.", BalloonIcon.Info);
+
         // If the app moved since "launch at startup" was enabled, the Run entry points
         // at a dead path; refresh it to the current executable.
         StartupRegistration.RefreshPathIfEnabled();
@@ -118,8 +122,8 @@ public partial class MainWindow : Window, IDisposable
     /// combination another app owns left the user with no working shortcut AND the dead
     /// combination persisted across restarts.
     /// </summary>
-    /// <returns>False when a requested change was refused and everything was rolled back.</returns>
-    public bool TryApplyHotkeys(
+    /// <returns>Which side (if any) the OS refused; on failure everything was rolled back.</returns>
+    public HotkeyApplyResult TryApplyHotkeys(
         HotkeyModifiers fullMods, Key fullKey,
         HotkeyModifiers regionMods, Key regionKey)
     {
@@ -142,12 +146,12 @@ public partial class MainWindow : Window, IDisposable
         if ((!fullChanged || fullOk) && (!regionChanged || regionOk))
         {
             _settings.Save(s);
-            return true;
+            return new HotkeyApplyResult(true, false, false);
         }
 
         (s.HotkeyModifiers, s.HotkeyKey, s.RegionHotkeyModifiers, s.RegionHotkeyKey) = previous;
         RegisterHotkeys();
-        return false;
+        return new HotkeyApplyResult(false, fullChanged && !fullOk, regionChanged && !regionOk);
     }
 
     /// <summary>
