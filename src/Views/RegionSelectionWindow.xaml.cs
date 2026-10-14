@@ -19,15 +19,6 @@ public partial class RegionSelectionWindow : Window
 {
     private const int MinSizePx = 10;
 
-    private const uint SWP_NOZORDER   = 0x0004;
-    private const uint SWP_NOACTIVATE = 0x0010;
-
-    [DllImport("user32.dll")] private static extern uint GetDpiForSystem();
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-        int x, int y, int cx, int cy, uint flags);
-
     private readonly DRectangle _virtualBounds;
     private double _pixelToDip;
 
@@ -41,37 +32,26 @@ public partial class RegionSelectionWindow : Window
 
         _virtualBounds = ScreenCapture.VirtualScreenBounds;
 
-        uint dpi = GetDpiForSystem();
-        if (dpi == 0) dpi = 96;
-        _pixelToDip = 96.0 / dpi;
-
-        Left   = _virtualBounds.X      * _pixelToDip;
-        Top    = _virtualBounds.Y      * _pixelToDip;
-        Width  = _virtualBounds.Width  * _pixelToDip;
-        Height = _virtualBounds.Height * _pixelToDip;
-
-        // The DIP math above uses the SYSTEM dpi, which on a mixed-DPI multi-monitor
-        // setup is only right for the primary monitor. Pin the window in PHYSICAL pixels
-        // once the HWND exists so it really covers every screen, and re-read the px→DIP
-        // factor from the window's own DPI in Loaded — otherwise the rectangle the user
-        // draws maps back to the wrong physical pixels and the capture is offset.
-        SourceInitialized += (_, _) =>
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            SetWindowPos(hwnd, IntPtr.Zero,
-                _virtualBounds.X, _virtualBounds.Y, _virtualBounds.Width, _virtualBounds.Height,
-                SWP_NOZORDER | SWP_NOACTIVATE);
-        };
+        // Pinned in PHYSICAL pixels so it really covers every screen, also when it starts
+        // on a monitor scaled differently from the primary. The px→DIP factor is re-read
+        // from the window's own DPI in Loaded / OnDpiChanged — otherwise the rectangle the
+        // user draws maps back to the wrong physical pixels and the capture is offset.
+        _pixelToDip = WindowPlacement.SystemPixelToDip();
+        WindowPlacement.PinToPhysicalBounds(this, _virtualBounds);
 
         Loaded += (_, _) =>
         {
-            var actual = VisualTreeHelper.GetDpi(this);
-            if (actual.DpiScaleX > 0)
-                _pixelToDip = 1.0 / actual.DpiScaleX;
-
+            _pixelToDip = WindowPlacement.PixelToDip(this, _pixelToDip);
             LayoutDimFullCover();
             Activate();
             Focus();
+        };
+
+        // The window can be resized after Loaded (re-pinned after a DPI change); keep the
+        // dim layer covering all of it while nothing is being dragged.
+        SizeChanged += (_, _) =>
+        {
+            if (IsLoaded && _dragStart is null) LayoutDimFullCover();
         };
 
         KeyDown += OnKeyDown;
@@ -79,6 +59,23 @@ public partial class RegionSelectionWindow : Window
         MouseMove += OnMouseMove;
         MouseLeftButtonUp += OnMouseUp;
         MouseRightButtonDown += (_, _) => Cancel();
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (newDpi.DpiScaleX > 0) _pixelToDip = 1.0 / newDpi.DpiScaleX;
+
+        // A drag in progress was measured in the old DIPs; drop it rather than capture
+        // the wrong pixels. The user simply drags again.
+        if (_dragStart is not null)
+        {
+            ReleaseMouseCapture();
+            _dragStart = null;
+            SelectionRect.Visibility = Visibility.Collapsed;
+            SizeChip.Visibility = Visibility.Collapsed;
+        }
+        if (IsLoaded) LayoutDimFullCover();
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
