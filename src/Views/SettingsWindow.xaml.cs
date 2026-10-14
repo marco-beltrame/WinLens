@@ -56,6 +56,9 @@ public partial class SettingsWindow : Window
         Func<EngineOptions, Task<EngineTestResult>> onTestEngine)
     {
         InitializeComponent();
+        // From the assembly, so the footer can't fall behind the release again.
+        var version = typeof(SettingsWindow).Assembly.GetName().Version;
+        if (version != null) FooterText.Text = $"WinLens v{version.ToString(3)}";
         _settings = settings;
         _onTranslate = onTranslate;
         _onApplyHotkeys = onApplyHotkeys;
