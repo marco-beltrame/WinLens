@@ -28,12 +28,13 @@ public sealed record PackManifest(
     [property: JsonPropertyName("models")] Dictionary<string, PackFile> Models)
 {
     /// <summary>
-    /// Languages offline translation can offer: those with a model both to and from
-    /// English, since every other pair goes through English.
+    /// Languages offline translation can offer: those with a model to or from English,
+    /// since every other pair goes through English. Most have both; a few only one (no
+    /// open model translates English into Japanese well enough, so Japanese is read only).
     /// </summary>
     public IReadOnlyList<string> Languages =>
-        Models.Keys.Select(k => k.Split('-')).Where(p => p.Length == 2 && p[1] == "en")
-            .Select(p => p[0]).Where(l => Models.ContainsKey($"en-{l}")).OrderBy(l => l).ToList();
+        Models.Keys.Select(k => k.Split('-')).Where(p => p.Length == 2 && (p[0] == "en") != (p[1] == "en"))
+            .Select(p => p[0] == "en" ? p[1] : p[0]).Distinct().OrderBy(l => l).ToList();
 }
 
 /// <summary>
@@ -85,20 +86,21 @@ public sealed class OfflinePacks
 
     public bool RuntimeInstalled => File.Exists(Path.Combine(RuntimeDir, OkMarker));
 
-    /// <summary>A language is usable once both of its directions are installed.</summary>
-    public bool IsLanguageInstalled(string lang) =>
-        lang == English || (IsInstalled($"{lang}-{English}") && IsInstalled($"{English}-{lang}"));
+    /// <summary>Text in <paramref name="lang"/> can be read (translated from).</summary>
+    public bool CanRead(string lang) => lang == English || IsInstalled($"{lang}-{English}");
 
-    /// <summary>Installed languages, English excluded.</summary>
+    /// <summary>Text can be written in <paramref name="lang"/> (translated into).</summary>
+    public bool CanWrite(string lang) => lang == English || IsInstalled($"{English}-{lang}");
+
+    /// <summary>Languages with at least one direction installed, English excluded.</summary>
     public IReadOnlyList<string> InstalledLanguages()
     {
         if (!Directory.Exists(ModelsDir)) return Array.Empty<string>();
         return Directory.EnumerateDirectories(ModelsDir)
-            .Select(Path.GetFileName)
-            .Select(n => n!.Split('-'))
-            .Where(p => p.Length == 2 && p[1] == English)
-            .Select(p => p[0])
-            .Where(IsLanguageInstalled)
+            .Select(d => Path.GetFileName(d)!.Split('-'))
+            .Where(p => p.Length == 2 && (p[0] == English) != (p[1] == English) && IsInstalled($"{p[0]}-{p[1]}"))
+            .Select(p => p[0] == English ? p[1] : p[0])
+            .Distinct()
             .OrderBy(l => l)
             .ToList();
     }
@@ -114,8 +116,8 @@ public sealed class OfflinePacks
     }
 
     /// <summary>
-    /// Downloads what <paramref name="lang"/> needs (the runtime the first time, then both
-    /// directions), reporting progress from 0 to 1 over the total size.
+    /// Downloads what <paramref name="lang"/> needs (the runtime the first time, then each
+    /// direction the release has), reporting progress from 0 to 1 over the total size.
     /// </summary>
     public async Task InstallLanguageAsync(HttpClient http, PackManifest manifest, string lang,
         IProgress<double>? progress, CancellationToken ct)
@@ -127,13 +129,11 @@ public sealed class OfflinePacks
                 throw new NotSupportedException($"no runtime for {RuntimeId}");
             jobs.Add((rt, RuntimeDir));
         }
-        foreach (var pair in new[] { $"{lang}-{English}", $"{English}-{lang}" })
-        {
-            if (IsInstalled(pair)) continue;
-            if (!manifest.Models.TryGetValue(pair, out var m))
-                throw new NotSupportedException($"no model {pair}");
-            jobs.Add((m, ModelDir(pair)));
-        }
+        var pairs = new[] { $"{lang}-{English}", $"{English}-{lang}" }.Where(manifest.Models.ContainsKey).ToList();
+        if (pairs.Count == 0)
+            throw new NotSupportedException($"no model for {lang}");
+        foreach (var pair in pairs.Where(p => !IsInstalled(p)))
+            jobs.Add((manifest.Models[pair], ModelDir(pair)));
 
         long total = Math.Max(1, jobs.Sum(j => j.file.Size));
         long before = 0;
@@ -147,7 +147,7 @@ public sealed class OfflinePacks
         progress?.Report(1.0);
     }
 
-    /// <summary>Removes both directions of <paramref name="lang"/>. The runtime stays.</summary>
+    /// <summary>Removes every direction of <paramref name="lang"/>. The runtime stays.</summary>
     public void RemoveLanguage(string lang)
     {
         foreach (var pair in new[] { $"{lang}-{English}", $"{English}-{lang}" })

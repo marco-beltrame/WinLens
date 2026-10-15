@@ -58,16 +58,38 @@ public class OfflineTests : IDisposable
         Assert.Equal(expected, OfflinePacks.PackCode(target));
 
     [Fact]
-    public void Manifest_OffersOnlyLanguagesWithBothDirections()
+    public void Manifest_OffersEveryLanguageWithAModelToOrFromEnglish()
     {
         var f = new PackFile("x.zip", 1, "00");
         var m = new PackManifest(new(), new()
         {
             ["zh-en"] = f, ["en-zh"] = f,
-            ["ja-en"] = f,             // no en-ja: not offered
+            ["ja-en"] = f,             // read only
             ["it-en"] = f, ["en-it"] = f,
+            ["de-fr"] = f,             // not through English: ignored
         });
-        Assert.Equal(new[] { "it", "zh" }, m.Languages);
+        Assert.Equal(new[] { "it", "ja", "zh" }, m.Languages);
+    }
+
+    [Fact]
+    public async Task Install_OneWayLanguage_InstallsTheDirectionThereIs()
+    {
+        var files = new Files();
+        var runtime = Zip(("onnxruntime.dll", "native"));
+        var jaEn = Zip(("model.json", "{}"));
+        files.Content["rt.zip"] = runtime;
+        files.Content["ja-en.zip"] = jaEn;
+        var manifest = new PackManifest(
+            new() { [OfflinePacks.RuntimeId] = Describe("rt.zip", runtime) },
+            new() { ["ja-en"] = Describe("ja-en.zip", jaEn) });
+        using var http = new HttpClient(files);
+        var packs = new OfflinePacks(_root, "https://example.test/rel/");
+
+        await packs.InstallLanguageAsync(http, manifest, "ja", null, default);
+
+        Assert.True(packs.CanRead("ja"));
+        Assert.False(packs.CanWrite("ja"));
+        Assert.Equal(new[] { "ja" }, packs.InstalledLanguages());
     }
 
     [Fact]
@@ -138,7 +160,8 @@ public class OfflineTests : IDisposable
         await packs.InstallLanguageAsync(http, manifest, "zh", new SyncProgress(reported.Add), default);
 
         Assert.True(packs.RuntimeInstalled);
-        Assert.True(packs.IsLanguageInstalled("zh"));
+        Assert.True(packs.CanRead("zh"));
+        Assert.True(packs.CanWrite("zh"));
         Assert.Equal(new[] { "zh" }, packs.InstalledLanguages());
         Assert.True(File.Exists(Path.Combine(packs.ModelDir("en-zh"), "model.json")));
         Assert.Equal(1.0, reported[^1]);
@@ -160,7 +183,7 @@ public class OfflineTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidDataException>(() => packs.InstallLanguageAsync(http, manifest, "zh", null, default));
 
-        Assert.False(packs.IsLanguageInstalled("zh"));
+        Assert.False(packs.CanWrite("zh"));
         Assert.False(packs.IsInstalled("en-zh"));
         // Nothing half-written is left next to the packs.
         Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(_root), p => p.EndsWith(".part") || p.EndsWith(".tmp"));

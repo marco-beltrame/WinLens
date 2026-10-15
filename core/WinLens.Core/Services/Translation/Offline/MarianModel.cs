@@ -6,7 +6,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.Tokenizers;
 
 namespace WinLens.Services.Translation.Offline;
@@ -170,11 +169,12 @@ internal sealed class MarianModel : IDisposable
         var next = new long[batch];
         Array.Fill(next, _cfg.DecoderStartId);
 
-        // The first step runs without a cache: empty past tensors and use_cache_branch=false.
+        // The first step runs without a cache (use_cache_branch=false). The past it ignores
+        // must still have valid shapes: one zeroed position, as optimum feeds it.
         var past = new Dictionary<string, OrtValue>();
+        var dummy = new float[batch * _cfg.Heads * _cfg.HeadDim];
         foreach (var name in _pastNames)
-            past[name] = OrtValue.CreateAllocatedTensorValue(OrtAllocator.DefaultInstance,
-                TensorElementType.Float, new long[] { batch, _cfg.Heads, 0, _cfg.HeadDim });
+            past[name] = OrtValue.CreateTensorValueFromMemory(dummy, new long[] { batch, _cfg.Heads, 1, _cfg.HeadDim });
         var outputNames = new List<string> { "logits" };
         outputNames.AddRange(_pastNames.Select(n => "present." + n["past_key_values.".Length..]));
 

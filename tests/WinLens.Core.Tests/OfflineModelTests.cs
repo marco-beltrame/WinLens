@@ -30,8 +30,10 @@ public class OfflineModelTests
         OnnxRuntimeLoader.Use(packs.RuntimeDir);
         using var options = new SessionOptions();
 
+        var all = Fixtures();
+        Assert.NotEmpty(all);
         var failures = new List<string>();
-        foreach (var (pair, fixtures) in Fixtures())
+        foreach (var (pair, fixtures) in all)
         {
             using var model = new MarianModel(packs.ModelDir(pair), options);
             var outputs = model.Translate(fixtures.Select(f => f.Text).ToArray(), default);
@@ -55,7 +57,8 @@ public class OfflineModelTests
         if (Root == null) return;
         var packs = new OfflinePacks(Root);
         var langs = packs.InstalledLanguages();
-        if (!langs.Contains("zh") || !langs.Contains("it")) return;
+        Assert.Contains("zh", langs);
+        Assert.Contains("it", langs);
 
         using var svc = new TranslationService(null, Path.Combine(Path.GetTempPath(), "winlens-tests.log"), Root);
         svc.Configure(new EngineOptions(TranslationEngine.Offline));

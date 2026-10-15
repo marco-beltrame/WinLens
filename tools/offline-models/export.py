@@ -51,7 +51,9 @@ def greedy(enc, dec, cfg, ids, max_new=64):
     mask = np.ones_like(input_ids)
     hidden = enc.run(["last_hidden_state"], {"input_ids": input_ids, "attention_mask": mask})[0]
     past_names = [i.name for i in dec.get_inputs() if i.name.startswith("past_key_values.")]
-    past = {n: np.zeros((1, cfg["heads"], 0, cfg["headDim"]), dtype=np.float32) for n in past_names}
+    # The merged decoder ignores the past on its first step, but its shapes must still be
+    # valid: one dummy position, as optimum feeds it.
+    past = {n: np.zeros((1, cfg["heads"], 1, cfg["headDim"]), dtype=np.float32) for n in past_names}
     out_names = ["logits"] + ["present." + n[len("past_key_values."):] for n in past_names]
     token, out = cfg["decoderStartId"], []
     for step in range(max_new):
@@ -146,6 +148,8 @@ def main():
     for zip_path in sorted(out_dir.glob("runtime-*.zip")):
         rid = zip_path.stem[len("runtime-"):]
         manifest["runtime"][rid] = {"file": zip_path.name, "size": zip_path.stat().st_size, "sha256": sha256(zip_path)}
+    if not manifest["models"]:
+        sys.exit("no model could be built")
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     (work / "fixtures.json").write_text(json.dumps(fixtures, ensure_ascii=False, indent=1))
 

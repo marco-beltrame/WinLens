@@ -65,7 +65,7 @@ internal sealed class OfflineProvider : ITranslationProvider, IDisposable
     {
         var results = new string?[items.Count];
         var tgt = OfflinePacks.PackCode(target);
-        if (tgt == null || !_packs.RuntimeInstalled || !_packs.IsLanguageInstalled(tgt))
+        if (tgt == null || !_packs.RuntimeInstalled || !_packs.CanWrite(tgt))
             return results;
 
         var installed = _packs.InstalledLanguages();
@@ -83,7 +83,7 @@ internal sealed class OfflineProvider : ITranslationProvider, IDisposable
                 foreach (var i in idx) results[i] = items[i].Text;
                 continue;
             }
-            if (src != OfflinePacks.English && !_packs.IsLanguageInstalled(src))
+            if (!_packs.CanRead(src))
                 continue;
 
             try
