@@ -1,4 +1,4 @@
-"""Offline MT benchmark: quality (chrF vs Google) and int8 CPU speed for a screen of lines."""
+"""Offline MT benchmark: quality (chrF vs reference translations) and int8 CPU speed for a screen of lines."""
 import json, os, sys, time, shutil, statistics, urllib.parse, urllib.request
 from pathlib import Path
 import sacrebleu
@@ -75,7 +75,7 @@ def score(hyp, ref, t):
 
 for s, t in PAIRS:
     lines = S[s]
-    ref = google(lines, s, t)
+    ref = S[t]  # the sentence sets are parallel translations of each other
     print(f"\n===== {s}->{t} =====", flush=True)
     systems = {}
     if "en" in (s, t):
@@ -98,7 +98,7 @@ for s, t in PAIRS:
         row = dict(pair=f"{s}-{t}", system=name, chrf=round(chrf,1), bleu=round(bleu,1), secs=round(secs,2), mb=round(size/1e6))
         OUT.append(row); print("RESULT", json.dumps(row), flush=True)
     for i, src in enumerate(lines):
-        print(f"  [{i}] {src}\n      G: {ref[i]}")
+        print(f"  [{i}] {src}\n      ref: {ref[i]}")
         for name, (hyp, _, _) in systems.items():
             print(f"      {name.split('/')[-1][:22]}: {hyp[i]}")
     sys.stdout.flush()
