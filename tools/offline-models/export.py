@@ -3,9 +3,10 @@ Builds the offline translation packs WinLens downloads (see .github/workflows/of
 
 For every direction in models.json: export the Opus-MT model to ONNX, quantize it to int8,
 keep only what the app reads (encoder.onnx, decoder.onnx, source.spm, target.spm,
-vocab.json, model.json) and zip it. Also writes fixtures.json: token ids and greedy output
-for a few sentences, decoded here with the same ONNX files, which the .NET test compares
-against WinLens's own tokenizer and decoder loop.
+vocab.json, model.json) and zip it. Also writes fixtures.json: a few sentences with their
+token ids, which the .NET test compares against WinLens's own tokenizer, and the
+translation decoded here (printed for review; int8 results vary slightly between CPUs, so
+the decoder loop is checked by reference.py on the test machine instead).
 
 models.json maps each direction to candidate models, tried in order.
 
@@ -14,11 +15,12 @@ Usage: python export.py <models.json> <out_dir>
 import hashlib, json, shutil, sys, zipfile
 from pathlib import Path
 
-import numpy as np
 import onnxruntime as ort
 from onnxruntime.quantization import QuantType, quantize_dynamic
 from optimum.exporters.onnx import main_export
 from transformers import AutoConfig, AutoTokenizer
+
+from reference import greedy
 
 # Short UI strings and full sentences, as they come off a screen.
 SAMPLES = {
@@ -45,40 +47,6 @@ def sha256(path):
     return h.hexdigest()
 
 
-def greedy(enc, dec, cfg, ids, max_new=64):
-    """The decoder loop of MarianModel.cs, one sentence at a time."""
-    input_ids = np.array([ids], dtype=np.int64)
-    mask = np.ones_like(input_ids)
-    hidden = enc.run(["last_hidden_state"], {"input_ids": input_ids, "attention_mask": mask})[0]
-    past_names = [i.name for i in dec.get_inputs() if i.name.startswith("past_key_values.")]
-    # The merged decoder ignores the past on its first step, but its shapes must still be
-    # valid: one dummy position, as optimum feeds it.
-    past = {n: np.zeros((1, cfg["heads"], 1, cfg["headDim"]), dtype=np.float32) for n in past_names}
-    out_names = ["logits"] + ["present." + n[len("past_key_values."):] for n in past_names]
-    token, out = cfg["decoderStartId"], []
-    for step in range(max_new):
-        feed = dict(past)
-        feed.update({
-            "input_ids": np.array([[token]], dtype=np.int64),
-            "encoder_attention_mask": mask,
-            "encoder_hidden_states": hidden,
-            "use_cache_branch": np.array([step > 0]),
-        })
-        res = dec.run(out_names, feed)
-        logits = res[0][0, -1].copy()
-        logits[cfg["padId"]] = -np.inf
-        token = int(np.argmax(logits))
-        if token == cfg["eosId"]:
-            break
-        out.append(token)
-        # The encoder's key/values are computed on the first step only; later steps return
-        # placeholders for them, so only the decoder's half of the cache moves on.
-        for name, value in zip(past_names, res[1:]):
-            if step == 0 or ".decoder." in name:
-                past[name] = value
-    return out
-
-
 def build(pair, spec, out_dir, work):
     model_id, prefix = spec["model"], spec.get("prefix")
     src, _ = pair.split("-")
@@ -95,8 +63,10 @@ def build(pair, spec, out_dir, work):
     pack = work / pair
     shutil.rmtree(pack, ignore_errors=True)
     pack.mkdir(parents=True)
-    quantize_dynamic(str(raw / "encoder_model.onnx"), str(pack / "encoder.onnx"), weight_type=QuantType.QInt8)
-    quantize_dynamic(str(raw / "decoder_model_merged.onnx"), str(pack / "decoder.onnx"), weight_type=QuantType.QInt8)
+    # reduce_range keeps int8 products from saturating on x64 CPUs without VNNI (most of
+    # the PCs WinLens runs on), at a negligible cost in accuracy.
+    for src_name, dst_name in (("encoder_model.onnx", "encoder.onnx"), ("decoder_model_merged.onnx", "decoder.onnx")):
+        quantize_dynamic(str(raw / src_name), str(pack / dst_name), weight_type=QuantType.QInt8, reduce_range=True)
     tok.save_pretrained(raw / "tok")
     for name in ("source.spm", "target.spm", "vocab.json"):
         shutil.copy(raw / "tok" / name, pack / name)

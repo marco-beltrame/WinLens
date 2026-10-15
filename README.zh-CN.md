@@ -132,14 +132,14 @@ WinLens 使用 Windows 自带的 OCR 引擎，因此只能识别已安装对应 
 4. 逐行翻译（Google 接口，MyMemory 作为兜底），按会话缓存。
 5. 在每行原文上绘制一个不透明、颜色与字体均匹配的覆盖框。
 
-> 说明：OCR 在本地运行；翻译通过在线接口（Google / MyMemory）完成。离线翻译已在路线图中。
+> 说明：OCR 在本地运行；翻译默认通过在线接口（Google / MyMemory）完成，也可在设置中选择“Offline”，下载语言包后完全离线翻译（基于 Opus-MT 与 ONNX Runtime）。
 
 ## 路线图
 
 完整列表见 [issues](https://github.com/marco-beltrame/WinLens/issues) 和
 [项目看板](https://github.com/marco-beltrame/WinLens/projects)。
 
-- [ ] 离线翻译（Argos / NLLB）：无需联网、无速率限制、更注重隐私。
+- [x] 离线翻译：无需联网、无速率限制、更注重隐私。
 - [ ] PaddleOCR / ONNX 引擎：更强的 CJK 与小字识别，无需系统语言包。
 - [ ] 跨平台（Avalonia）：macOS 和 Linux。
 - [ ] 区域截取：翻译选定区域而非整个屏幕。

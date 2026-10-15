@@ -93,6 +93,16 @@ jobs:
           echo "WINLENS_OFFLINE_ROOT=$root" >> "$GITHUB_ENV"
           echo "WINLENS_OFFLINE_FIXTURES=$PWD/artifact/work/fixtures.json" >> "$GITHUB_ENV"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The reference decodes on this machine: int8 results vary slightly between CPUs.
+      - name: Reference translations
+        run: |
+          pip install numpy "onnxruntime==${ORT_VERSION}"
+          python tools/offline-models/reference.py "$WINLENS_OFFLINE_ROOT" "$WINLENS_OFFLINE_FIXTURES"
+
       - name: Test against the packs
         run: dotnet test tests/WinLens.Core.Tests/WinLens.Core.Tests.csproj -c Release --filter "FullyQualifiedName~OfflineModelTests" --logger "console;verbosity=detailed"
 

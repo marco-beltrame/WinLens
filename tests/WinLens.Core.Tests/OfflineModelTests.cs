@@ -8,15 +8,16 @@ namespace WinLens.Core.Tests;
 
 /// <summary>
 /// Runs the real packs, in the offline-models workflow only (it sets the two variables):
-/// WinLens's tokenizer and decoder loop must give the same ids and the same translations
-/// as the Python reference that built the packs.
+/// WinLens's tokenizer must give the ids the Python tokenizer gave when the packs were
+/// built, and its decoder loop the translations tools/offline-models/reference.py decoded
+/// on this same machine.
 /// </summary>
 public class OfflineModelTests
 {
     private static readonly string? Root = Environment.GetEnvironmentVariable("WINLENS_OFFLINE_ROOT");
     private static readonly string? FixturesPath = Environment.GetEnvironmentVariable("WINLENS_OFFLINE_FIXTURES");
 
-    private sealed record Fixture(string Text, int[] Ids, string Output);
+    private sealed record Fixture(string Text, int[] Ids, int[] OutIds);
 
     private static Dictionary<string, Fixture[]> Fixtures() =>
         JsonSerializer.Deserialize<Dictionary<string, Fixture[]>>(File.ReadAllText(FixturesPath!),
@@ -44,9 +45,10 @@ public class OfflineModelTests
                 // One line at a time, like the reference: int8 activations are quantized
                 // per batch, so a line's neighbours can nudge a word or two.
                 var output = model.Translate(new[] { f.Text }, default)[0];
+                var expected = model.Decode(f.OutIds);
                 Console.WriteLine($"{pair}: {f.Text} -> {output}");
-                if (output != f.Output)
-                    failures.Add($"{pair} \"{f.Text}\": \"{output}\" != \"{f.Output}\"");
+                if (output != expected)
+                    failures.Add($"{pair} \"{f.Text}\": \"{output}\" != \"{expected}\"");
             }
         }
         Assert.True(failures.Count == 0, string.Join("\n", failures));
