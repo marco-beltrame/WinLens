@@ -206,7 +206,9 @@ public partial class MainWindow : Window, IDisposable
                 onApplyHotkeys: TryApplyHotkeys,
                 onHotkeyCapturePaused: SetHotkeysPaused,
                 onEngineChanged: () => _translator.Configure(_settings.Current.ToEngineOptions()),
-                onTestEngine: options => _translator.TestAsync(options, _settings.Current.TargetLanguage));
+                onTestEngine: options => _translator.TestAsync(options, _settings.Current.TargetLanguage),
+                offlinePacks: _translator.OfflinePacks,
+                onOfflinePacksChanged: _translator.OfflinePacksChanged);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show();
         }

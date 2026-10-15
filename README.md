@@ -65,7 +65,7 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
 - Dark control panel. You can change the target language straight from the overlay.
 - Right-click a block to copy the original text or the translation.
-- Works out of the box with Google Translate, or with your own LibreTranslate server or a local AI model (Ollama, LM Studio) so your text never leaves your PC.
+- Works out of the box with Google Translate, or fully offline with downloadable language packs, or with your own LibreTranslate server or local AI model (Ollama, LM Studio), so your text never leaves your PC.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
 ## Control panel
@@ -86,13 +86,27 @@ Choose the engine under **Translation engine** in the control panel.
 | **Google Translate** (default) | None | Google's servers, with MyMemory as a fallback |
 | **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
 | **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
+| **Offline** | Download a language pack in the control panel (about 160 MB per language, once) | Nowhere: it runs on your PC, with no network |
 
-With LibreTranslate or a local model, nothing is sent to Google unless you turn on
+With LibreTranslate, a local model or Offline, nothing is sent to Google unless you turn on
 **Use Google as a backup**. **Test connection** checks the settings before you rely on them.
 API keys are encrypted for your Windows account (DPAPI) before they are saved.
 
 With the default engine, the text WinLens reads from your screen is sent to Google
 to be translated. Screenshots themselves never leave your PC.
+
+### Offline translation
+
+Offline uses [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models from the University
+of Helsinki, quantized to int8 and run with [ONNX Runtime](https://onnxruntime.ai). A pack is
+downloaded once per language; English needs none, and other pairs go through English
+(Chinese → English → Italian). Chinese, Japanese, Italian, German, French, Spanish,
+Portuguese and Russian work both ways; Korean is translated from only. A screenful of
+Chinese takes well under a second to turn into Italian, even on a modest two-core CPU.
+
+The quality is good for short interface text and plain sentences, and below Google's for
+idioms and long, complex sentences, which is why Google stays the default. If you downloaded
+packs but use Google, WinLens falls back to them when Google and MyMemory can't be reached.
 
 ## Installation
 
@@ -169,9 +183,9 @@ Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in pl
 The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 [project board](https://github.com/marco-beltrame/WinLens/projects) have the full list.
 
-- [ ] Offline translation (Argos / NLLB): no network, no rate limits, more privacy.
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
+- [x] Offline translation: no network, no rate limits, more privacy.
 - [x] Region capture: translate a selected area instead of the whole screen.
 - [x] LibreTranslate and local AI models (Ollama, LM Studio) as translation engines.
 - [x] Animated demo (GIF) in the README.
@@ -208,5 +222,6 @@ MIT. See [LICENSE](LICENSE).
 ## Acknowledgements
 
 - Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
+- Offline translation with [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models (CC BY 4.0, University of Helsinki) on [ONNX Runtime](https://onnxruntime.ai) (MIT, Microsoft).
 - Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
 - Built with .NET 10 and WPF.

@@ -26,7 +26,7 @@ public sealed class UserSettings
     public Key RegionHotkeyKey { get; set; } = Key.R;
 
     /// <summary>
-    /// "google" (default, no setup), "libretranslate" or "local-llm". A string rather than
+    /// "google" (default, no setup), "libretranslate", "local-llm" or "offline". A string rather than
     /// an enum so a value from a newer version falls back to Google instead of making the
     /// whole file unreadable.
     /// </summary>
@@ -42,7 +42,7 @@ public sealed class UserSettings
     /// <summary>API key encrypted for the current Windows user (DPAPI), base64.</summary>
     public string? LlmKeyProtected { get; set; }
 
-    /// <summary>Use Google for lines the chosen server couldn't translate. Off keeps text on the user's server.</summary>
+    /// <summary>Use Google for lines the chosen engine couldn't translate. Off keeps text on the user's PC or server.</summary>
     public bool EngineFallbackToGoogle { get; set; }
 
     /// <summary>The engine settings in the form TranslationService takes, keys decrypted.</summary>
@@ -55,6 +55,8 @@ public sealed class UserSettings
                 LibreTranslateUrl, SecretStore.Unprotect(LibreTranslateKeyProtected), null, EngineFallbackToGoogle),
             Services.Translation.TranslationEngine.LocalLlm => new EngineOptions(engine,
                 LlmUrl, SecretStore.Unprotect(LlmKeyProtected), LlmModel, EngineFallbackToGoogle),
+            Services.Translation.TranslationEngine.Offline => new EngineOptions(engine,
+                FallbackToGoogle: EngineFallbackToGoogle),
             _ => EngineOptions.Default,
         };
     }

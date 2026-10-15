@@ -1,20 +1,23 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using WinLens.Models;
 using WinLens.Services.Translation;
+using WinLens.Services.Translation.Offline;
 
 namespace WinLens.Services;
 
 /// <summary>
 /// Translates OCR lines. By default it tries Google gtx first (auto source detection, a
 /// whole screen per request), then MyMemory for whatever Google could not translate; no
-/// account or key is needed for either. <see cref="Configure"/> switches to a LibreTranslate
-/// server or a local model instead. Logs each failure to %TEMP%\winlens.log.
+/// account or key is needed for either, and downloaded offline languages are the last
+/// resort when both fail. <see cref="Configure"/> switches to a LibreTranslate server, a
+/// local model or the offline models instead. Logs each failure to %TEMP%\winlens.log.
 /// </summary>
 public sealed class TranslationService : IDisposable
 {
@@ -23,17 +26,31 @@ public sealed class TranslationService : IDisposable
     private readonly TranslationHttp _http;
     // Local models can take a while per batch and usually serve one request at a time.
     private readonly TranslationHttp _slowHttp;
+    private readonly OfflineProvider _offline;
     private volatile ITranslationProvider[] _providers;
     private readonly ConcurrentDictionary<(string text, string tgt), string> _cache = new();
     private const int MaxCacheEntries = 2000;
 
     public TranslationService() : this(null) { }
 
-    internal TranslationService(HttpMessageHandler? handler, string? logPath = null)
+    internal TranslationService(HttpMessageHandler? handler, string? logPath = null, string? offlineRoot = null)
     {
         _http = new TranslationHttp(handler, logPath);
         _slowHttp = new TranslationHttp(handler, logPath, TimeSpan.FromSeconds(120), maxConcurrent: 1);
+        OfflinePacks = new OfflinePacks(offlineRoot ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WinLens", "offline"));
+        _offline = new OfflineProvider(OfflinePacks, _http.Log);
         _providers = BuildChain(EngineOptions.Default);
+    }
+
+    /// <summary>The downloaded offline languages, for the settings window.</summary>
+    public OfflinePacks OfflinePacks { get; }
+
+    /// <summary>Call after installing or removing offline languages.</summary>
+    public void OfflinePacksChanged()
+    {
+        _offline.Unload();
+        _cache.Clear();
     }
 
     /// <summary>Switches engine. Translations already running finish on the old one.</summary>
@@ -51,9 +68,12 @@ public sealed class TranslationService : IDisposable
         {
             TranslationEngine.LibreTranslate => new LibreTranslateProvider(_http, options.Url, options.ApiKey),
             TranslationEngine.LocalLlm => new OpenAiCompatibleProvider(_slowHttp, options.Url, options.ApiKey, options.Model),
+            TranslationEngine.Offline => _offline,
             _ => null,
         };
-        if (chosen == null) return google;
+        // Without a network (or rate-limited by both services) the offline languages, if
+        // any were downloaded, still beat handing back the untranslated text.
+        if (chosen == null) return google.Append(_offline).ToArray();
         return options.FallbackToGoogle ? google.Prepend(chosen).ToArray() : new[] { chosen };
     }
 
@@ -70,6 +90,11 @@ public sealed class TranslationService : IDisposable
                 return await new LibreTranslateProvider(_http, options.Url, options.ApiKey).TestAsync(TestPhrase, tgt, ct);
             case TranslationEngine.LocalLlm:
                 return await new OpenAiCompatibleProvider(_slowHttp, options.Url, options.ApiKey, options.Model).TestAsync(TestPhrase, tgt, ct);
+            case TranslationEngine.Offline:
+                var offline = await _offline.TranslateAsync(new[] { new TranslationRequest(TestPhrase, "en") }, tgt, ct);
+                return offline[0] is string text
+                    ? new EngineTestResult(true, "Ready.", text)
+                    : new EngineTestResult(false, "Download this language first.");
             default:
                 var result = await new GoogleTranslateProvider(_http).TranslateAsync(
                     new[] { new TranslationRequest(TestPhrase, null) }, tgt, ct);
@@ -125,10 +150,14 @@ public sealed class TranslationService : IDisposable
             list.Add(i);
         }
 
-        foreach (var provider in _providers) // a snapshot: Configure swaps the array
+        var providers = _providers; // a snapshot: Configure swaps the array
+        foreach (var provider in providers)
         {
             if (pending.Count == 0)
                 break;
+            // Offline as a last resort answers this screen only: once the network is back,
+            // the same line should get Google's (better) translation, not this one.
+            bool cache = provider != _offline || providers[0] == _offline;
 
             var translated = await provider.TranslateAsync(pending, tgt, ct);
             var failed = new List<TranslationRequest>();
@@ -140,7 +169,7 @@ public sealed class TranslationService : IDisposable
                     failed.Add(pending[k]);
                     continue;
                 }
-                Store((text, tgt), done);
+                if (cache) Store((text, tgt), done);
                 foreach (var i in slots[text])
                     results[i] = done;
             }
@@ -173,6 +202,7 @@ public sealed class TranslationService : IDisposable
 
     public void Dispose()
     {
+        _offline.Dispose();
         _http.Dispose();
         _slowHttp.Dispose();
     }
