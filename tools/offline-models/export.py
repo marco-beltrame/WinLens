@@ -71,7 +71,11 @@ def greedy(enc, dec, cfg, ids, max_new=64):
         if token == cfg["eosId"]:
             break
         out.append(token)
-        past = dict(zip(past_names, res[1:]))
+        # The encoder's key/values are computed on the first step only; later steps return
+        # placeholders for them, so only the decoder's half of the cache moves on.
+        for name, value in zip(past_names, res[1:]):
+            if step == 0 or ".decoder." in name:
+                past[name] = value
     return out
 
 

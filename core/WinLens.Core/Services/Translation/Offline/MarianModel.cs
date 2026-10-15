@@ -214,14 +214,23 @@ internal sealed class MarianModel : IDisposable
                     else output[b].Add(best);
                 }
 
-                // The cache this step produced is the next step's past. With the cache
-                // branch on, the encoder's key/values come back unchanged; they are taken
-                // from this step's output all the same, which keeps ownership simple.
+                // The cache this step produced is the next step's past. The encoder's
+                // key/values are computed on the first step only: later steps return
+                // placeholders for them, so those keep the first step's values.
                 outs[0].Dispose();
-                foreach (var v in past.Values) v.Dispose();
-                past.Clear();
                 for (int k = 0; k < _pastNames.Length; k++)
-                    past[_pastNames[k]] = outs[k + 1];
+                {
+                    var name = _pastNames[k];
+                    if (step == 0 || name.Contains(".decoder.", StringComparison.Ordinal))
+                    {
+                        past[name].Dispose();
+                        past[name] = outs[k + 1];
+                    }
+                    else
+                    {
+                        outs[k + 1].Dispose();
+                    }
+                }
             }
         }
         finally
