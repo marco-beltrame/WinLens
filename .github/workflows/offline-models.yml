@@ -39,7 +39,7 @@ jobs:
         run: |
           pip install --extra-index-url https://download.pytorch.org/whl/cpu \
             "torch==2.5.1" "transformers==4.46.3" "optimum==1.23.3" sentencepiece sacremoses protobuf
-          pip install "onnxruntime==${ORT_VERSION}" "onnx==1.17.0"
+          pip install "onnxruntime==${ORT_VERSION}" "onnx>=1.17" ml_dtypes
 
       - name: ONNX Runtime for Windows
         run: |
