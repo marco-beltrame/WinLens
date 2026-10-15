@@ -12,8 +12,9 @@ namespace WinLens.Services;
 
 /// <summary>
 /// Translates OCR lines. By default it tries Google gtx first (auto source detection, a
-/// whole screen per request), then MyMemory for whatever Google could not translate; no
-/// account or key is needed for either. <see cref="Configure"/> switches to a LibreTranslate
+/// whole screen per request), then Microsoft (the keyless endpoint Edge uses, which works
+/// where Google is blocked), then MyMemory for whatever is still untranslated; no account
+/// or key is needed for any of them. <see cref="Configure"/> switches to a LibreTranslate
 /// server or a local model instead. Logs each failure to %TEMP%\winlens.log.
 /// </summary>
 public sealed class TranslationService : IDisposable
@@ -46,7 +47,7 @@ public sealed class TranslationService : IDisposable
 
     private ITranslationProvider[] BuildChain(EngineOptions options)
     {
-        var google = new ITranslationProvider[] { new GoogleTranslateProvider(_http), new MyMemoryProvider(_http) };
+        var google = new ITranslationProvider[] { new GoogleTranslateProvider(_http), new MicrosoftTranslatorProvider(_http), new MyMemoryProvider(_http) };
         ITranslationProvider? chosen = options.Engine switch
         {
             TranslationEngine.LibreTranslate => new LibreTranslateProvider(_http, options.Url, options.ApiKey),
@@ -71,11 +72,13 @@ public sealed class TranslationService : IDisposable
             case TranslationEngine.LocalLlm:
                 return await new OpenAiCompatibleProvider(_slowHttp, options.Url, options.ApiKey, options.Model).TestAsync(TestPhrase, tgt, ct);
             default:
-                var result = await new GoogleTranslateProvider(_http).TranslateAsync(
-                    new[] { new TranslationRequest(TestPhrase, null) }, tgt, ct);
+                var phrase = new[] { new TranslationRequest(TestPhrase, null) };
+                var result = await new GoogleTranslateProvider(_http).TranslateAsync(phrase, tgt, ct);
+                if (result[0] == null)
+                    result = await new MicrosoftTranslatorProvider(_http).TranslateAsync(phrase, tgt, ct);
                 return result[0] is string sample
                     ? new EngineTestResult(true, "Connected.", sample)
-                    : new EngineTestResult(false, "Google didn't answer. Check your connection.");
+                    : new EngineTestResult(false, "No translation service answered. Check your connection.");
         }
     }
 
