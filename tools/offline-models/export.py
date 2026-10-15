@@ -127,6 +127,8 @@ def main():
     if not manifest["models"]:
         sys.exit("no model could be built")
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    for name, f in [*manifest["runtime"].items(), *manifest["models"].items()]:
+        print(f"{name}: {f['size'] / 1e6:.1f} MB", flush=True)
     (work / "fixtures.json").write_text(json.dumps(fixtures, ensure_ascii=False, indent=1))
 
 
