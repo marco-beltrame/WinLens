@@ -29,6 +29,7 @@ def load(mid):
         for f in q.glob("*.onnx"):
             quantize_dynamic(str(d / f.name), str(f), weight_type=QuantType.QInt8)
         shutil.rmtree(d)
+        shutil.rmtree(Path.home() / ".cache/huggingface/hub", ignore_errors=True)
     size = sum(f.stat().st_size for f in q.glob("*.onnx") if "with_past" not in f.name and "merged" not in f.name) + \
            sum(f.stat().st_size for f in q.glob("*with_past*.onnx"))
     m = ORTModelForSeq2SeqLM.from_pretrained(q); tok = AutoTokenizer.from_pretrained(q)
@@ -90,7 +91,7 @@ for s, t in PAIRS:
                 b = try_run(mid, a[0], "en", t)
                 if b: break
             if b: systems["opus pivot via en"] = (b[0], a[1] + b[1], a[2] + b[2])
-    for mid in ["facebook/m2m100_418M", "facebook/nllb-200-distilled-600M"]:
+    for mid in ["facebook/m2m100_418M"]:
         r = try_run(mid, lines, s, t)
         if r: systems[mid] = r
     for name, (hyp, secs, size) in systems.items():
