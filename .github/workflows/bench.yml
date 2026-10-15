@@ -5,11 +5,13 @@ on:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "transformers==4.46.3" "optimum[onnxruntime]==1.23.3" "onnxruntime==1.20.1" sentencepiece sacremoses sacrebleu protobuf
-      - run: nproc && python bench/bench.py
+      - run: |
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "transformers==4.46.3" "optimum==1.23.3" sentencepiece sacremoses protobuf
+          pip install "onnxruntime==1.31.0" "onnx>=1.17" ml_dtypes
+      - run: python bench/diag.py
