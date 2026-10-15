@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="WinLens"
         Icon="/assets/winlens.ico"
-        Width="440" Height="694"
+        Width="440" Height="756"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -48,11 +48,13 @@
             </Grid>
 
             <!-- ============== Content ============== -->
-            <StackPanel Grid.Row="1" Margin="22,6,22,20">
+            <!-- Scrolls so the window still works on a short display (the settings list
+                 grew past what fits on a 768 px laptop screen). -->
+            <ScrollViewer x:Name="ContentScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="22,6,22,20">
 
                 <TextBlock Text="Translate your screen" Style="{StaticResource H1Text}"/>
-                <TextBlock Style="{StaticResource CaptionText}" Margin="0,6,0,0"
-                           Text="Press your shortcut anywhere in Windows to translate on-screen text right where it sits."/>
 
                 <Button x:Name="TranslateButton" Style="{StaticResource PrimaryButton}"
                         Margin="0,18,0,0" Click="OnTranslateNow">
@@ -82,8 +84,96 @@
                            Text="+ Add OCR languages in Windows…"
                            MouseLeftButtonUp="OnAddLanguages"/>
 
-                <!-- Shortcut -->
-                <TextBlock Text="SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
+                <!-- Translation engine -->
+                <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
+                <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
+                          SelectionChanged="OnEngineChanged">
+                    <ComboBoxItem Tag="google" Content="Google Translate"/>
+                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
+                    <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
+                    <ComboBoxItem Tag="offline" Content="Offline"/>
+                </ComboBox>
+                <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
+                           TextWrapping="Wrap"/>
+
+                <StackPanel x:Name="EnginePanel" Visibility="Collapsed">
+                    <TextBlock Text="SERVER ADDRESS" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <TextBox x:Name="EngineUrlBox" Style="{StaticResource ModernTextBox}"
+                             LostKeyboardFocus="OnEngineFieldCommitted"/>
+
+                    <StackPanel x:Name="ModelPanel">
+                        <TextBlock Text="MODEL" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                        <TextBox x:Name="EngineModelBox" Style="{StaticResource ModernTextBox}"
+                                 Tag="First model on the server"
+                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
+                    </StackPanel>
+
+                    <TextBlock Text="API KEY (OPTIONAL)" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <PasswordBox x:Name="EngineKeyBox" Style="{StaticResource ModernPasswordBox}"
+                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="TestEngineButton" Grid.Column="0" Style="{StaticResource SecondaryButton}"
+                                Content="Test connection" Click="OnTestEngine"/>
+                        <TextBlock x:Name="EngineStatus" Grid.Column="1" Margin="12,0,0,0"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{StaticResource TextSubtleBrush}"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Offline languages, downloaded on demand -->
+                <StackPanel x:Name="OfflinePanel" Visibility="Collapsed">
+                    <TextBlock Text="LANGUAGES" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <Border Background="{StaticResource SurfaceAltBrush}" CornerRadius="10"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                        <ItemsControl x:Name="OfflineList" Margin="0,4">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="14,6,8,6" MinHeight="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextBrush}" FontSize="13"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Detail}" VerticalAlignment="Center"
+                                                   Margin="0,0,10,0" FontSize="12"
+                                                   Foreground="{StaticResource TextSubtleBrush}"/>
+                                        <Button Grid.Column="2" Style="{StaticResource SecondaryButton}"
+                                                Content="{Binding Action}" Tag="{Binding}" MinWidth="96"
+                                                IsEnabled="{Binding CanAct}" Click="OnOfflineAction"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock x:Name="OfflineStatus" Visibility="Collapsed" TextWrapping="Wrap"
+                               Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+                </StackPanel>
+
+                <Grid x:Name="FallbackPanel" Margin="0,14,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Use Google as a backup" Foreground="{StaticResource TextBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="FallbackCaption" Style="{StaticResource CaptionText}"
+                                   Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                              VerticalAlignment="Center"
+                              Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"/>
+                </Grid>
+
+                <!-- Shortcut: translates the monitor the cursor is on -->
+                <TextBlock Text="TRANSLATE SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -99,6 +189,29 @@
                             Content="Change" Margin="10,0,0,0" Click="OnChangeHotkey"/>
                 </Grid>
 
+                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+
+                <!-- Shortcut (drag-selected region) -->
+                <TextBlock Text="REGION SHORTCUT" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="RegionHotkeyChip" Grid.Column="0" Height="42" CornerRadius="10"
+                            Background="{StaticResource SurfaceAltBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                        <TextBlock x:Name="RegionHotkeyText" VerticalAlignment="Center" Margin="14,0"
+                                   Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button x:Name="ChangeRegionHotkeyButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
+                            Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
+                </Grid>
+
+                <TextBlock x:Name="RegionHotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+
                 <!-- Launch at startup -->
                 <Grid Margin="0,22,0,0">
                     <Grid.ColumnDefinitions>
@@ -110,6 +223,8 @@
                                    FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="Run WinLens automatically when you sign in."
                                    Style="{StaticResource CaptionText}" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="StartupMessage" Visibility="Collapsed" TextWrapping="Wrap"
+                                   Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
                     </StackPanel>
                     <CheckBox x:Name="StartupToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                               VerticalAlignment="Center"
@@ -120,8 +235,9 @@
                 <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,22,0,14"/>
                 <TextBlock x:Name="FooterText" Style="{StaticResource CaptionText}"
                            HorizontalAlignment="Center"
-                           Text="WinLens v1.2"/>
+                           Text="WinLens"/>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
     </Border>
 </Window>

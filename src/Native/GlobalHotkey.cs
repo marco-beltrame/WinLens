@@ -24,7 +24,6 @@ public enum HotkeyModifiers : uint
 public sealed class GlobalHotkey : IDisposable
 {
     private const int WM_HOTKEY = 0x0312;
-    private const int HotkeyId = 0xB001;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -33,14 +32,21 @@ public sealed class GlobalHotkey : IDisposable
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
     private readonly Window _host;
+    private readonly int _hotkeyId;
     private HwndSource? _source;
     private bool _registered;
 
     public event Action? Pressed;
 
-    public GlobalHotkey(Window host)
+    /// <param name="hotkeyId">
+    /// Must be unique per host window — several GlobalHotkey instances share the same
+    /// HWND, and WM_HOTKEY is dispatched by id, so a duplicate would make one hotkey
+    /// fire the other's handler (and unregistering one would kill both).
+    /// </param>
+    public GlobalHotkey(Window host, int hotkeyId)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _hotkeyId = hotkeyId;
     }
 
     public void Register(HotkeyModifiers modifiers, Key key)
@@ -63,9 +69,12 @@ public sealed class GlobalHotkey : IDisposable
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
         uint mods = (uint)modifiers | (uint)HotkeyModifiers.NoRepeat;
 
-        if (!RegisterHotKey(helper.Handle, HotkeyId, mods, vk))
+        if (!RegisterHotKey(helper.Handle, _hotkeyId, mods, vk))
         {
             int err = Marshal.GetLastWin32Error();
+            // Don't leave a dead hook on the shared HwndSource when registration fails.
+            _source.RemoveHook(WndProc);
+            _source = null;
             throw new InvalidOperationException(
                 $"RegisterHotKey failed (Win32 error {err}). The combination may already be in use.");
         }
@@ -79,7 +88,7 @@ public sealed class GlobalHotkey : IDisposable
             if (_registered)
             {
                 var helper = new WindowInteropHelper(_host);
-                UnregisterHotKey(helper.Handle, HotkeyId);
+                UnregisterHotKey(helper.Handle, _hotkeyId);
                 _registered = false;
             }
             _source.RemoveHook(WndProc);
@@ -89,7 +98,7 @@ public sealed class GlobalHotkey : IDisposable
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
+        if (msg == WM_HOTKEY && wParam.ToInt32() == _hotkeyId)
         {
             handled = true;
             Pressed?.Invoke();

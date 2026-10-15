@@ -17,6 +17,7 @@
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="Translate now" Click="OnTranslateNow"/>
+                    <MenuItem Header="Translate a region…" Click="OnTranslateRegion"/>
                     <MenuItem Header="Open WinLens" Click="OnOpenSettings"/>
                     <Separator/>
                     <MenuItem Header="Exit" Click="OnExit"/>

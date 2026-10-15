@@ -1,0 +1,133 @@
+name: release
+
+# Publishes a GitHub release for a version already in CHANGELOG.md: builds every
+# download the README lists, writes the notes from that version's changelog entry
+# and attaches the files with their SHA256.
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the v (e.g. 1.3.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FILES: WinLens.exe WinLens-win-x64-standalone.zip WinLens-win-arm64.exe WinLens-win-arm64-standalone.zip
+
+jobs:
+  build:
+    name: build (${{ matrix.rid }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+          - rid: win-arm64
+            runner: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (framework-dependent, single file)
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish-fd
+
+      # Not single-file: WPF's native DLLs can't be bundled (see build.yml).
+      - name: Publish (self-contained)
+        run: dotnet publish WinLens.csproj -c Release -r ${{ matrix.rid }} --self-contained true -o publish-sc
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          # The x64 exe keeps the plain name every release has used; arm64 says what it is.
+          $exe = if ("${{ matrix.rid }}" -eq "win-x64") { "WinLens.exe" } else { "WinLens-${{ matrix.rid }}.exe" }
+          Copy-Item publish-fd/WinLens.exe "dist/$exe"
+          Compress-Archive -Path publish-sc/* -DestinationPath "dist/WinLens-${{ matrix.rid }}-standalone.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.rid }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        env:
+          INPUT: ${{ inputs.version }}
+        run: |
+          v="${INPUT:-${GITHUB_REF_NAME#v}}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          section=$(awk -v v="$V" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }' CHANGELOG.md)
+          if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
+            echo "CHANGELOG.md has no entry for $V" >&2
+            exit 1
+          fi
+
+          {
+            echo "## WinLens v$V"
+            echo "$section"
+            echo
+            echo "**Install:** download \`WinLens.exe\` and run it. Needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)."
+            echo "For no install at all, take \`WinLens-win-x64-standalone.zip\`, extract it and run \`WinLens.exe\` inside."
+            echo "Snapdragon / ARM devices: the \`win-arm64\` files."
+            echo
+            echo "---"
+            echo
+            echo "**SHA256**"
+            echo
+            echo "| File | SHA256 |"
+            echo "| --- | --- |"
+            for f in $FILES; do
+              echo "| \`$f\` | \`$(sha256sum "dist/$f" | cut -d' ' -f1)\` |"
+            done
+            echo
+            echo "Unsigned build: on first launch SmartScreen may warn, choose **More info > Run anyway**."
+            echo
+            echo "Full changelog: https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          cd dist
+          if gh release view "v$V" >/dev/null 2>&1; then
+            # Re-running for a published version refreshes its notes and files, and drops
+            # files that are no longer built.
+            gh release edit "v$V" --title "WinLens v$V" --notes-file ../notes.md
+            gh release upload "v$V" $FILES --clobber
+            for a in $(gh release view "v$V" --json assets --jq '.assets[].name'); do
+              case " $FILES " in *" $a "*) ;; *) gh release delete-asset "v$V" "$a" --yes ;; esac
+            done
+          else
+            gh release create "v$V" --title "WinLens v$V" --notes-file ../notes.md --target "$GITHUB_SHA" $FILES
+          fi

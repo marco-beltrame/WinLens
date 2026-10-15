@@ -18,7 +18,7 @@ English · [简体中文](README.zh-CN.md)
 [![Build](https://github.com/marco-beltrame/WinLens/actions/workflows/build.yml/badge.svg)](https://github.com/marco-beltrame/WinLens/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/github/license/marco-beltrame/WinLens?color=8b5cf6)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#installation)
-[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Release](https://img.shields.io/github/v/release/marco-beltrame/WinLens?color=8b5cf6)](https://github.com/marco-beltrame/WinLens/releases)
 [![Downloads](https://img.shields.io/github/downloads/marco-beltrame/WinLens/total?color=8b5cf6)](https://github.com/marco-beltrame/WinLens/releases)
 [![Stars](https://img.shields.io/github/stars/marco-beltrame/WinLens?style=flat&color=8b5cf6)](https://github.com/marco-beltrame/WinLens/stargazers)
@@ -65,6 +65,7 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
 - Dark control panel. You can change the target language straight from the overlay.
 - Right-click a block to copy the original text or the translation.
+- Works out of the box with Google Translate, or fully offline with downloadable language packs, or with your own LibreTranslate server or local AI model (Ollama, LM Studio), so your text never leaves your PC.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
 ## Control panel
@@ -76,17 +77,47 @@ choose the OCR source language, and toggle launch-at-startup.
 <img src="assets/settings.png" alt="WinLens control panel" width="330"/>
 </div>
 
+## Translation engines and privacy
+
+Choose the engine under **Translation engine** in the control panel.
+
+| Engine | Setup | Where your text goes |
+|---|---|---|
+| **Google Translate** (default) | None | Google's servers, with MyMemory as a fallback |
+| **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
+| **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
+| **Offline** | Download a language pack in the control panel (about 150 MB per language, once) | Nowhere: it runs on your PC, with no network |
+
+With LibreTranslate, a local model or Offline, nothing is sent to Google unless you turn on
+**Use Google as a backup**. **Test connection** checks the settings before you rely on them.
+API keys are encrypted for your Windows account (DPAPI) before they are saved.
+
+With the default engine, the text WinLens reads from your screen is sent to Google
+to be translated. Screenshots themselves never leave your PC.
+
+### Offline translation
+
+Offline uses [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models from the University
+of Helsinki, quantized to int8 and run with [ONNX Runtime](https://onnxruntime.ai). A pack is
+downloaded once per language; English needs none, and other pairs go through English
+(Chinese → English → Italian). Chinese, Japanese, Italian, German, French, Spanish,
+Portuguese and Russian work both ways; Korean is translated from only. A screenful takes
+about half a second on a recent CPU (about a second between two non-English languages).
+
+The quality is good for short interface text and plain sentences, and below Google's for
+idioms and long, complex sentences, which is why Google stays the default. If you downloaded
+packs but use Google, WinLens falls back to them when Google and MyMemory can't be reached.
+
 ## Installation
 
 ### Download
 
-Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page and pick the
-build for your CPU (`win-x64` for most PCs, `win-arm64` for Snapdragon / ARM devices). Two
-flavours are offered:
+Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page. Most PCs want
+`WinLens.exe`; Snapdragon / ARM devices take the `win-arm64` files. Two flavours are offered:
 
 | Download | Size | Needs a runtime? |
 | --- | --- | --- |
-| `WinLens-win-x64.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `WinLens.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | `WinLens-win-x64-standalone.zip` | ~75 MB | No — the runtime is bundled |
 
 Pick the small `.exe` if you already have (or don't mind installing) the .NET 10 Desktop
@@ -99,7 +130,7 @@ The executable isn't code-signed yet, so on first launch Windows SmartScreen may
 download instead, compare its checksum against the SHA256 listed on the release page:
 
 ```powershell
-Get-FileHash .\WinLens-win-x64.exe -Algorithm SHA256
+Get-FileHash .\WinLens.exe -Algorithm SHA256
 ```
 
 ### OCR language packs
@@ -140,11 +171,11 @@ language only saves a little time.
 Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in place
 ```
 
-1. Capture the whole virtual screen (DPI-accurate, all monitors).
+1. Capture the monitor under the cursor, or the region you drag (DPI-accurate on mixed-scaling setups).
 2. Upscale the image about 2x so small UI text is recognized more reliably.
 3. Run every installed OCR recognizer and keep from each only the blocks whose script matches
    it (Latin from the Latin engine, CJK from the CJK engine), then drop overlapping duplicates.
-4. Translate each line (Google endpoint, with a MyMemory fallback), cached per session.
+4. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
 5. Draw an opaque, color- and font-matched box over each original line.
 
 ## Roadmap
@@ -152,10 +183,11 @@ Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in pl
 The [issues](https://github.com/marco-beltrame/WinLens/issues) and
 [project board](https://github.com/marco-beltrame/WinLens/projects) have the full list.
 
-- [ ] Offline translation (Argos / NLLB): no network, no rate limits, more privacy.
 - [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
 - [ ] Cross-platform (Avalonia): macOS and Linux.
-- [ ] Region capture: translate a selected area instead of the whole screen.
+- [x] Offline translation: no network, no rate limits, more privacy.
+- [x] Region capture: translate a selected area instead of the whole screen.
+- [x] LibreTranslate and local AI models (Ollama, LM Studio) as translation engines.
 - [x] Animated demo (GIF) in the README.
 
 ## Building from source
@@ -190,5 +222,6 @@ MIT. See [LICENSE](LICENSE).
 ## Acknowledgements
 
 - Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
+- Offline translation with [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models (CC BY 4.0, University of Helsinki) on [ONNX Runtime](https://onnxruntime.ai) (MIT, Microsoft).
 - Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
 - Built with .NET 10 and WPF.

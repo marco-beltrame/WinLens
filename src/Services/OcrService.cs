@@ -21,9 +21,13 @@ namespace WinLens.Services;
 public sealed class OcrService
 {
     // Upscaling the screenshot before OCR markedly improves accuracy on small,
-    // anti-aliased UI text (chat bubbles etc.). Capped so we don't blow up memory.
+    // anti-aliased UI text (chat bubbles etc.). Capped so we don't blow up memory:
+    // a per-side limit AND a total-area limit, because on a large or high-DPI
+    // multi-monitor desktop a 2x upscale can otherwise allocate hundreds of MB per
+    // copy (and the conversion holds two copies at once).
     private const double TargetScale = 2.0;
     private const int MaxDimension = 8000;
+    private const long MaxPixels = 40_000_000; // ~40 MP upscaled (~160 MB per 32bpp copy)
 
     /// <summary>
     /// OCR recognizer languages installed on this machine (tag + display name).
@@ -50,13 +54,23 @@ public sealed class OcrService
     public async Task<List<OcrBlock>> RecognizeAsync(Bitmap bitmap, string? sourceLang = null)
     {
         double scale = ChooseScale(bitmap);
-        Bitmap? scaledOwned = scale == 1.0 ? null : Upscale(bitmap, scale);
-        var source = scaledOwned ?? bitmap;
+        Bitmap? scaledOwned = Math.Abs(scale - 1.0) < 0.001 ? null : Rescale(bitmap, scale);
 
+        // Convert to a SoftwareBitmap, then free the upscaled GDI bitmap immediately —
+        // before the (memory-heavy) recognizers run — so we never hold the scaled
+        // bitmap and the SoftwareBitmap alongside the OCR working set at the same time.
+        SoftwareBitmap softwareBitmap;
         try
         {
-            using var softwareBitmap = ToSoftwareBitmap(source);
+            softwareBitmap = ToSoftwareBitmap(scaledOwned ?? bitmap);
+        }
+        finally
+        {
+            scaledOwned?.Dispose();
+        }
 
+        using (softwareBitmap)
+        {
             // Explicit source language → use only that recognizer.
             if (!string.IsNullOrWhiteSpace(sourceLang) &&
                 !string.Equals(sourceLang, "auto", StringComparison.OrdinalIgnoreCase))
@@ -67,51 +81,64 @@ public sealed class OcrService
             }
 
             // Auto: run every installed recognizer and keep from each ONLY the blocks
-            // whose text matches that recognizer's script (Latin vs CJK). This handles
-            // mixed screens (e.g. a Chinese bubble among Latin UI): the Latin engine
-            // contributes the Latin text, the CJK engine the CJK text. A single engine
+            // whose text matches that recognizer's script (Latin, Cyrillic, Greek, ..., or
+            // Chinese/Japanese/Korean separately). This handles mixed screens (e.g. a
+            // Chinese bubble among Latin UI): the Latin engine contributes the Latin
+            // text, the Chinese engine the Chinese text. A single engine
             // can't do both, so we union the appropriate parts and dedup overlaps.
+            // ONE recognizer per script is enough, and that cap matters: each engine makes
+            // a full pass over an image of up to MaxPixels, so a desktop with en-US, it-IT
+            // and fr-FR installed used to run three Latin passes whose extra blocks
+            // IsAppropriate keeps and DedupOverlaps then discards — pure cost. The user's
+            // profile engine is offered first so it wins its own bucket.
             var engines = new List<OcrEngine>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var covered = new HashSet<OcrScript>();
 
             void Add(OcrEngine? e)
             {
                 if (e == null) return;
-                var tag = e.RecognizerLanguage?.LanguageTag ?? Guid.NewGuid().ToString();
-                if (seen.Add(tag)) engines.Add(e);
+                if (covered.Add(OcrPostProcessor.ScriptOfTag(e.RecognizerLanguage?.LanguageTag)))
+                    engines.Add(e);
             }
 
             Add(OcrEngine.TryCreateFromUserProfileLanguages());
             foreach (var lang in OcrEngine.AvailableRecognizerLanguages)
+            {
+                if (covered.Count == OcrPostProcessor.ScriptCount) break; // every bucket filled
+                // Check the tag before building the engine — creating one we would
+                // immediately discard is wasted work.
+                if (covered.Contains(OcrPostProcessor.ScriptOfTag(lang.LanguageTag))) continue;
                 Add(OcrEngine.TryCreateFromLanguage(lang));
+            }
 
             // Run the recognizers concurrently. Each pass over the (upscaled) bitmap is
             // independent and read-only, so wall-time is the slowest engine, not their sum.
             var perEngine = await Task.WhenAll(engines.Select(async engine =>
             {
-                var es = ScriptOfTag(engine.RecognizerLanguage?.LanguageTag);
+                var es = OcrPostProcessor.ScriptOfTag(engine.RecognizerLanguage?.LanguageTag);
                 var blocks = await RunAsync(engine, softwareBitmap, scale);
-                return blocks.Where(b => IsAppropriate(b.OriginalText, es));
+                return blocks.Where(b => OcrPostProcessor.IsAppropriate(b.OriginalText, es));
             }));
 
             var all = perEngine.SelectMany(b => b).ToList();
             return MergeLineFragments(DedupOverlaps(all));
         }
-        finally
-        {
-            scaledOwned?.Dispose();
-        }
     }
 
     private static double ChooseScale(Bitmap b)
     {
+        // Largest scale (≤ TargetScale) that keeps the image inside the per-side and
+        // total-area caps. This may drop BELOW 1.0: a very wide virtual desktop (e.g.
+        // three 4K monitors ≈ 11520 px) exceeds what Windows OCR accepts at native
+        // size, so oversized captures are downscaled rather than failing outright.
         double s = TargetScale;
-        while (s > 1.0 && (b.Width * s > MaxDimension || b.Height * s > MaxDimension))
-            s -= 0.5;
-        return s < 1.0 ? 1.0 : s;
+        s = Math.Min(s, (double)MaxDimension / b.Width);
+        s = Math.Min(s, (double)MaxDimension / b.Height);
+        s = Math.Min(s, Math.Sqrt((double)MaxPixels / ((double)b.Width * b.Height)));
+        return s;
     }
 
-    private static Bitmap Upscale(Bitmap src, double scale)
+    private static Bitmap Rescale(Bitmap src, double scale)
     {
         int w = (int)Math.Round(src.Width * scale);
         int h = (int)Math.Round(src.Height * scale);
@@ -165,130 +192,33 @@ public sealed class OcrService
         return blocks;
     }
 
-    /// <summary>
-    /// Merge OCR fragments that sit on the same text line and are horizontally
-    /// adjacent (small gap) into one block. Fixes a stray leading word (e.g. "I")
-    /// being left untranslated/uncovered, and gives the translator the full sentence.
-    /// </summary>
-    private static List<OcrBlock> MergeLineFragments(List<OcrBlock> blocks)
-    {
-        if (blocks.Count < 2) return blocks;
+    private static List<OcrBlock> MergeLineFragments(List<OcrBlock> blocks) =>
+        FromLines(OcrPostProcessor.MergeLineFragments(ToLines(blocks)));
 
-        var ordered = blocks
-            .OrderBy(b => b.BoundingRect.Y)
-            .ThenBy(b => b.BoundingRect.X)
-            .ToList();
+    private static List<OcrBlock> DedupOverlaps(List<OcrBlock> blocks) =>
+        FromLines(OcrPostProcessor.DedupOverlaps(ToLines(blocks)));
 
-        var used = new bool[ordered.Count];
-        var result = new List<OcrBlock>(ordered.Count);
+    private static List<OcrLine> ToLines(List<OcrBlock> blocks) =>
+        blocks.Select(b => new OcrLine(b.OriginalText,
+            new OcrRect(b.BoundingRect.X, b.BoundingRect.Y, b.BoundingRect.Width, b.BoundingRect.Height),
+            b.DetectedLanguage)).ToList();
 
-        for (int i = 0; i < ordered.Count; i++)
+    private static List<OcrBlock> FromLines(List<OcrLine> lines) =>
+        lines.Select(l => new OcrBlock
         {
-            if (used[i]) continue;
-            used[i] = true;
-
-            var rect = ordered[i].BoundingRect;
-            var text = new StringBuilder(ordered[i].OriginalText);
-            var lang = ordered[i].DetectedLanguage;
-
-            bool extended = true;
-            while (extended)
-            {
-                extended = false;
-                for (int j = 0; j < ordered.Count; j++)
-                {
-                    if (used[j]) continue;
-                    var rb = ordered[j].BoundingRect;
-
-                    double centerA = rect.Y + rect.Height / 2;
-                    double centerB = rb.Y + rb.Height / 2;
-                    if (Math.Abs(centerA - centerB) >= 0.6 * Math.Min(rect.Height, rb.Height))
-                        continue; // not on the same line
-
-                    // Only absorb a fragment that follows closely on the right (or overlaps).
-                    double gap = rb.X - (rect.X + rect.Width);
-                    if (gap > 1.2 * Math.Max(rect.Height, rb.Height)) continue;
-                    if (rb.X + rb.Width < rect.X) continue; // fully to the left
-
-                    double nx = Math.Min(rect.X, rb.X);
-                    double ny = Math.Min(rect.Y, rb.Y);
-                    double nr = Math.Max(rect.X + rect.Width, rb.X + rb.Width);
-                    double nb = Math.Max(rect.Y + rect.Height, rb.Y + rb.Height);
-                    rect = new Rect(nx, ny, nr - nx, nb - ny);
-                    text.Append(' ').Append(ordered[j].OriginalText);
-
-                    used[j] = true;
-                    extended = true;
-                }
-            }
-
-            result.Add(new OcrBlock
-            {
-                OriginalText = text.ToString(),
-                BoundingRect = rect,
-                DetectedLanguage = lang,
-            });
-        }
-        return result;
-    }
-
-    private enum Script { Latin, Cjk }
-
-    private static Script ScriptOfTag(string? tag)
-    {
-        if (tag != null &&
-            (tag.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ||
-             tag.StartsWith("ja", StringComparison.OrdinalIgnoreCase) ||
-             tag.StartsWith("ko", StringComparison.OrdinalIgnoreCase)))
-            return Script.Cjk;
-        return Script.Latin;
-    }
-
-    private static bool IsCjk(char c) =>
-        (c >= 0x4E00 && c <= 0x9FFF) ||  // CJK Unified Ideographs
-        (c >= 0x3400 && c <= 0x4DBF) ||  // Extension A
-        (c >= 0x3040 && c <= 0x30FF) ||  // Hiragana + Katakana
-        (c >= 0xAC00 && c <= 0xD7AF);    // Hangul syllables
-
-    /// <summary>True when the text's dominant script matches the recognizer's script.</summary>
-    private static bool IsAppropriate(string text, Script engineScript)
-    {
-        int cjk = 0, latin = 0;
-        foreach (var c in text)
-        {
-            if (IsCjk(c)) cjk++;
-            else if (char.IsLetter(c)) latin++;
-        }
-        if (cjk == 0 && latin == 0) return true; // digits/punctuation only — keep, dedup later
-        return engineScript == Script.Cjk ? cjk >= latin : latin >= cjk;
-    }
-
-    private static List<OcrBlock> DedupOverlaps(List<OcrBlock> blocks)
-    {
-        var kept = new List<OcrBlock>();
-        foreach (var b in blocks.OrderByDescending(x => x.OriginalText?.Length ?? 0))
-        {
-            if (!kept.Any(k => OverlapRatio(k.BoundingRect, b.BoundingRect) > 0.5))
-                kept.Add(b);
-        }
-        return kept;
-    }
-
-    private static double OverlapRatio(Rect a, Rect b)
-    {
-        double ix = Math.Max(0, Math.Min(a.X + a.Width, b.X + b.Width) - Math.Max(a.X, b.X));
-        double iy = Math.Max(0, Math.Min(a.Y + a.Height, b.Y + b.Height) - Math.Max(a.Y, b.Y));
-        double inter = ix * iy;
-        double smaller = Math.Min(a.Width * a.Height, b.Width * b.Height);
-        return smaller <= 0 ? 0 : inter / smaller;
-    }
+            OriginalText = l.Text,
+            BoundingRect = new Rect(l.Rect.X, l.Rect.Y, l.Rect.Width, l.Rect.Height),
+            DetectedLanguage = l.Language,
+        }).ToList();
 
     /// <summary>
-    /// Convert a GDI bitmap straight into a SoftwareBitmap by copying its pixels once.
-    /// The previous path went bitmap → BMP encode → byte[] → IBuffer → decode, i.e. four
-    /// extra full-frame copies that, on an upscaled multi-monitor screenshot, each ran to
-    /// tens of MB and landed on the Large Object Heap. A 32bpp GDI bitmap is already BGRA
-    /// with a tight (w*4) stride, so we lock it and hand the bytes to the SoftwareBitmap.
+    /// Convert a GDI bitmap into a SoftwareBitmap by copying its pixels once into a
+    /// byte[] and handing that to the SoftwareBitmap. A 32bpp GDI bitmap is already
+    /// BGRA with a tight (w*4) stride, so the copy is a straight memcpy in the common
+    /// case. (An earlier attempt wrote directly into the SoftwareBitmap buffer via
+    /// IMemoryBufferByteAccess to drop this byte[]; that COM cast doesn't work under
+    /// CsWinRT and broke OCR, so we keep the simple, correct path. Peak memory is
+    /// instead bounded by the upscale caps in ChooseScale.)
     /// </summary>
     private static SoftwareBitmap ToSoftwareBitmap(Bitmap bitmap)
     {

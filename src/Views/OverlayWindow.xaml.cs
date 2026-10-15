@@ -1,43 +1,68 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinLens.Models;
+using WinLens.Native;
 using WinLens.Services;
+using WinLens.Services.Translation;
 using DBitmap = System.Drawing.Bitmap;
 using DRectangle = System.Drawing.Rectangle;
+// System.Drawing.Imaging and System.Windows.Media both define PixelFormat; alias the
+// GDI one rather than dropping the namespace import, which BitmapData/ImageLockMode need.
+using DPixelFormat = System.Drawing.Imaging.PixelFormat;
 
 namespace WinLens.Views;
 
 public partial class OverlayWindow : Window
 {
-    private readonly DRectangle _virtualBounds;
+    /// <summary>Where the window sits — always at least the captured area.</summary>
+    private readonly DRectangle _windowBounds;
+
+    /// <summary>The part of the screen the screenshot actually covers.</summary>
+    private readonly DRectangle _imageBounds;
+
     private readonly DBitmap _screenshot;
     private readonly List<OcrBlock> _blocks;
     private readonly TranslationService _translator;
     private readonly Action<string> _onTargetLangChanged;
     private readonly IReadOnlyList<string> _recentTargets;
-    private readonly double _pixelToDip;
+    private double _pixelToDip;
 
     private readonly Dictionary<OcrBlock, TextBox> _textBoxes = new();
     private string _currentTarget;
+    private bool _suppressLangEvents;
 
-    [DllImport("user32.dll")] private static extern uint GetDpiForSystem();
+    // Cancels the re-translation for the previous language when the user picks another
+    // one before it finished, so late results can't overwrite the newer language.
+    private CancellationTokenSource? _retranslateCts;
 
+    /// <param name="imageBounds">
+    /// Virtual-screen rectangle the screenshot was taken from. OCR block coordinates are
+    /// relative to this rectangle's top-left.
+    /// </param>
+    /// <param name="windowBounds">
+    /// Virtual-screen rectangle the overlay window should cover. Equal to
+    /// <paramref name="imageBounds"/> for a full-screen or single-monitor capture; for a
+    /// region capture it is the monitor(s) the region touches, so the control bar has room
+    /// while the user's OTHER monitors stay uncovered and keep receiving input.
+    /// </param>
     public OverlayWindow(
         DBitmap screenshot,
-        DRectangle virtualBounds,
+        DRectangle imageBounds,
+        DRectangle windowBounds,
         List<OcrBlock> blocks,
         TranslationService translator,
         string initialTarget,
@@ -46,31 +71,34 @@ public partial class OverlayWindow : Window
     {
         InitializeComponent();
         _screenshot = screenshot;
-        _virtualBounds = virtualBounds;
+        _imageBounds = imageBounds;
+        // The window must never be smaller than the image, or part of the translation
+        // would be clipped away.
+        _windowBounds = DRectangle.Union(windowBounds, imageBounds);
         _blocks = blocks;
         _translator = translator;
         _currentTarget = initialTarget;
         _onTargetLangChanged = onTargetLangChanged;
         _recentTargets = recentTargets ?? Array.Empty<string>();
 
-        uint dpi = GetDpiForSystem();
-        if (dpi == 0) dpi = 96;
-        _pixelToDip = 96.0 / dpi;
-
-        // Position + size window in DIPs to cover the virtual screen.
-        Left   = virtualBounds.X      * _pixelToDip;
-        Top    = virtualBounds.Y      * _pixelToDip;
-        Width  = virtualBounds.Width  * _pixelToDip;
-        Height = virtualBounds.Height * _pixelToDip;
+        // Pinned in PHYSICAL pixels, including across a DPI change when the window lands
+        // on a monitor scaled differently from the primary. The px→DIP factor is a guess
+        // until Loaded / OnDpiChanged read the DPI WPF really lays the window out with.
+        _pixelToDip = WindowPlacement.SystemPixelToDip();
+        WindowPlacement.PinToPhysicalBounds(this, _windowBounds);
 
         BackgroundImage.Source = ToBitmapSource(screenshot);
 
         PopulateLanguages();
 
         KeyDown += OnKeyDown;
+        // OverlayCanvas sits on top and fills the window, so it receives every click that
+        // a translation box doesn't handle first — including clicks over the dimmed area.
         OverlayCanvas.MouseLeftButtonDown += (_, _) => Close();
         Closed += (_, _) =>
         {
+            _retranslateCts?.Cancel();
+
             // Release the heavy bits the window held: the decoded full-screen screenshot
             // and the per-line text boxes. Without this the visual tree keeps them alive.
             BackgroundImage.Source = null;
@@ -78,12 +106,18 @@ public partial class OverlayWindow : Window
             _textBoxes.Clear();
             _screenshot.Dispose();
 
-            // Reclaim only once the window is actually torn down and dereferenced â€” running
-            // the compaction here (still inside Closed) would find everything still rooted.
+            // Reclaim only once the window is actually torn down and dereferenced —
+            // running the compaction here (still inside Closed) would find everything
+            // still rooted.
             Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(MemoryHygiene.Trim));
         };
         Loaded += (_, _) =>
         {
+            // WPF lays the window out with one DPI; use that exact value so box
+            // coordinates land on the right physical pixels.
+            _pixelToDip = WindowPlacement.PixelToDip(this, _pixelToDip);
+
+            PlaceBackgroundImage();
             BuildOverlayBoxes();
             BeginAnimation(OpacityProperty,
                 new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(150))));
@@ -92,16 +126,57 @@ public partial class OverlayWindow : Window
         };
     }
 
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (newDpi.DpiScaleX <= 0) return;
+        _pixelToDip = 1.0 / newDpi.DpiScaleX;
+
+        // The boxes were laid out for the old DPI; rebuild them so they stay over the
+        // original text. Block state (translations) lives on the OcrBlocks, so nothing is lost.
+        if (IsLoaded)
+        {
+            PlaceBackgroundImage();
+            BuildOverlayBoxes();
+        }
+    }
+
+    /// <summary>Offset of the screenshot inside the window, in physical pixels.</summary>
+    private int OffsetX => _imageBounds.X - _windowBounds.X;
+    private int OffsetY => _imageBounds.Y - _windowBounds.Y;
+
+    private void PlaceBackgroundImage()
+    {
+        Canvas.SetLeft(BackgroundImage, OffsetX * _pixelToDip);
+        Canvas.SetTop(BackgroundImage,  OffsetY * _pixelToDip);
+        BackgroundImage.Width  = _imageBounds.Width  * _pixelToDip;
+        BackgroundImage.Height = _imageBounds.Height * _pixelToDip;
+        BackgroundImage.Stretch = Stretch.Fill;
+    }
+
     private void PopulateLanguages()
     {
-        var itemStyle = (Style)FindResource("ModernComboBoxItem");
-        LanguagePicker.Populate(LanguageBox, itemStyle, _currentTarget, _recentTargets);
-        if (LanguageBox.SelectedIndex < 0)
-            LanguageBox.SelectedIndex = 0;
+        // Populate sets SelectedItem, which fires SelectionChanged. Without suppression
+        // a saved target that's missing from LanguageList would make the fallback
+        // selection (first item) look like a user choice: it would overwrite the saved
+        // TargetLanguage and retranslate everything to the wrong language.
+        _suppressLangEvents = true;
+        try
+        {
+            var itemStyle = (Style)FindResource("ModernComboBoxItem");
+            LanguagePicker.Populate(LanguageBox, itemStyle, _currentTarget, _recentTargets);
+            if (LanguageBox.SelectedIndex < 0)
+                LanguageBox.SelectedIndex = 0;
+        }
+        finally
+        {
+            _suppressLangEvents = false;
+        }
     }
 
     private async void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressLangEvents) return;
         if (LanguageBox.SelectedItem is not ComboBoxItem item) return;
         var newTarget = item.Tag as string;
         if (string.IsNullOrEmpty(newTarget) ||
@@ -109,21 +184,43 @@ public partial class OverlayWindow : Window
             return;
 
         _currentTarget = newTarget;
-        _onTargetLangChanged(newTarget);
 
-        await RetranslateAllAsync();
+        _retranslateCts?.Cancel();
+        _retranslateCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _retranslateCts = cts;
+
+        // async void: an exception escaping here would take the whole app down.
+        try
+        {
+            _onTargetLangChanged(newTarget);
+            await RetranslateAllAsync(newTarget, cts.Token);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Superseded by a newer language choice, or the overlay closed.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "WinLens — error",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
-    private async Task RetranslateAllAsync()
+    private async Task RetranslateAllAsync(string target, CancellationToken ct)
     {
-        var tasks = _blocks.Select(async b =>
+        var translated = await _translator.TranslateManyAsync(
+            _blocks.Select(b => new TranslationRequest(b.OriginalText, b.DetectedLanguage)).ToArray(),
+            target, ct);
+        // Results arrive on the UI thread; drop them once a newer request has started.
+        ct.ThrowIfCancellationRequested();
+        for (int i = 0; i < _blocks.Count; i++)
         {
-            var translated = await _translator.TranslateAsync(b.OriginalText, _currentTarget, b.DetectedLanguage);
-            b.TranslatedText = translated;
+            var b = _blocks[i];
+            b.TranslatedText = translated[i];
             if (_textBoxes.TryGetValue(b, out var tb))
-                ApplyText(tb, translated);
-        }).ToArray();
-        await Task.WhenAll(tasks);
+                ApplyText(tb, translated[i]);
+        }
     }
 
     private void BuildOverlayBoxes()
@@ -131,13 +228,18 @@ public partial class OverlayWindow : Window
         OverlayCanvas.Children.Clear();
         _textBoxes.Clear();
 
+        // Lock the screenshot once for the whole pass. Sampling used to go through
+        // Bitmap.GetPixel, which locks and validates per call — around 200 calls per
+        // block, on the UI thread, was a visible stall before the overlay faded in.
+        using var pixels = new PixelReader(_screenshot);
+
         foreach (var block in _blocks)
         {
-            var (bg, fg) = SampleColors(_screenshot, block.BoundingRect);
+            var (bg, fg) = SampleColors(pixels, block.BoundingRect);
 
-            // Convert pixel rect â†’ DIPs.
-            double dipX = block.BoundingRect.X      * _pixelToDip;
-            double dipY = block.BoundingRect.Y      * _pixelToDip;
+            // Convert pixel rect → DIPs, shifted by where the screenshot sits in the window.
+            double dipX = (block.BoundingRect.X + OffsetX) * _pixelToDip;
+            double dipY = (block.BoundingRect.Y + OffsetY) * _pixelToDip;
             double dipW = block.BoundingRect.Width  * _pixelToDip;
             double dipH = block.BoundingRect.Height * _pixelToDip;
 
@@ -227,7 +329,41 @@ public partial class OverlayWindow : Window
         return Math.Max(7, size);
     }
 
-    private static (Color bg, Color fg) SampleColors(DBitmap bmp, Rect rect)
+    /// <summary>
+    /// Reads pixels straight out of a locked GDI bitmap. Assumes the 32bpp ARGB, top-down
+    /// layout GDI+ gives for the bitmaps <see cref="Native.ScreenCapture"/> creates, which
+    /// is the same assumption <see cref="OcrService"/> makes when it converts them.
+    /// </summary>
+    private sealed class PixelReader : IDisposable
+    {
+        private readonly DBitmap _bitmap;
+        private readonly BitmapData _data;
+
+        public int Width { get; }
+        public int Height { get; }
+
+        public PixelReader(DBitmap bitmap)
+        {
+            _bitmap = bitmap;
+            Width = bitmap.Width;
+            Height = bitmap.Height;
+            _data = bitmap.LockBits(
+                new DRectangle(0, 0, Width, Height),
+                ImageLockMode.ReadOnly,
+                DPixelFormat.Format32bppArgb);
+        }
+
+        /// <summary>Caller must keep x/y inside the bitmap — the hot path does not re-check.</summary>
+        public (byte R, byte G, byte B) Get(int x, int y)
+        {
+            int bgra = Marshal.ReadInt32(_data.Scan0, y * _data.Stride + x * 4);
+            return ((byte)((bgra >> 16) & 0xFF), (byte)((bgra >> 8) & 0xFF), (byte)(bgra & 0xFF));
+        }
+
+        public void Dispose() => _bitmap.UnlockBits(_data);
+    }
+
+    private static (Color bg, Color fg) SampleColors(PixelReader pixels, Rect rect)
     {
         int left   = (int)Math.Floor(rect.X);
         int top    = (int)Math.Floor(rect.Y);
@@ -237,15 +373,23 @@ public partial class OverlayWindow : Window
         long r = 0, g = 0, b = 0, n = 0;
 
         int pad = Math.Max(2, (bottom - top) / 6);
-        int x0 = Math.Clamp(left  - pad, 0, bmp.Width  - 1);
-        int x1 = Math.Clamp(right + pad, 0, bmp.Width  - 1);
-        int y0 = Math.Clamp(top   - pad, 0, bmp.Height - 1);
-        int y1 = Math.Clamp(bottom + pad, 0, bmp.Height - 1);
+        int x0 = Math.Clamp(left  - pad, 0, pixels.Width  - 1);
+        int x1 = Math.Clamp(right + pad, 0, pixels.Width  - 1);
+        int y0 = Math.Clamp(top   - pad, 0, pixels.Height - 1);
+        int y1 = Math.Clamp(bottom + pad, 0, pixels.Height - 1);
 
-        SampleStrip(bmp, x0, y0, x1, Math.Max(y0, top - 1),     ref r, ref g, ref b, ref n);
-        SampleStrip(bmp, x0, Math.Min(y1, bottom + 1), x1, y1,  ref r, ref g, ref b, ref n);
-        SampleStrip(bmp, x0, top, Math.Max(x0, left - 1), bottom, ref r, ref g, ref b, ref n);
-        SampleStrip(bmp, Math.Min(x1, right + 1), top, x1, bottom, ref r, ref g, ref b, ref n);
+        // Clamp the inner edges too: an OCR rect can extend past the bitmap, and the
+        // strips below index directly with no further bounds check.
+        int topEdge    = Math.Clamp(top,        0, pixels.Height - 1);
+        int bottomEdge = Math.Clamp(bottom + 1, 0, pixels.Height - 1);
+        int leftEdge   = Math.Clamp(left - 1,   0, pixels.Width  - 1);
+        int rightEdge  = Math.Clamp(right + 1,  0, pixels.Width  - 1);
+        int bottomRow  = Math.Clamp(bottom,     0, pixels.Height - 1);
+
+        SampleStrip(pixels, x0, y0, x1, Math.Max(y0, topEdge - 1), ref r, ref g, ref b, ref n);
+        SampleStrip(pixels, x0, Math.Min(y1, bottomEdge), x1, y1,  ref r, ref g, ref b, ref n);
+        SampleStrip(pixels, x0, topEdge, Math.Max(x0, leftEdge), bottomRow, ref r, ref g, ref b, ref n);
+        SampleStrip(pixels, Math.Min(x1, rightEdge), topEdge, x1, bottomRow, ref r, ref g, ref b, ref n);
 
         Color bg;
         if (n == 0)
@@ -263,7 +407,7 @@ public partial class OverlayWindow : Window
         return (bg, fg);
     }
 
-    private static void SampleStrip(DBitmap bmp, int x0, int y0, int x1, int y1,
+    private static void SampleStrip(PixelReader pixels, int x0, int y0, int x1, int y1,
                                     ref long r, ref long g, ref long b, ref long n)
     {
         if (x1 <= x0 || y1 <= y0) return;
@@ -272,8 +416,8 @@ public partial class OverlayWindow : Window
         for (int y = y0; y < y1; y += stepY)
         for (int x = x0; x < x1; x += stepX)
         {
-            var p = bmp.GetPixel(x, y);
-            r += p.R; g += p.G; b += p.B; n++;
+            var (pr, pg, pb) = pixels.Get(x, y);
+            r += pr; g += pg; b += pb; n++;
         }
     }
 
@@ -303,18 +447,33 @@ public partial class OverlayWindow : Window
         if (e.Key == Key.Escape) Close();
     }
 
+    /// <summary>
+    /// Copies the screenshot into a frozen WPF bitmap. This used to encode the whole
+    /// capture to BMP in a MemoryStream and let BitmapImage decode it again — on a
+    /// multi-monitor desktop that is two extra ~100 MB copies plus the encode/decode,
+    /// immediately after OCR has already peaked. WritePixels takes the locked GDI
+    /// scanlines directly, so there is one copy and no codec.
+    /// </summary>
     private static BitmapSource ToBitmapSource(DBitmap bmp)
     {
-        using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Bmp);
-        ms.Position = 0;
-
-        var image = new BitmapImage();
-        image.BeginInit();
-        image.CacheOption = BitmapCacheOption.OnLoad;
-        image.StreamSource = ms;
-        image.EndInit();
-        image.Freeze();
-        return image;
+        var data = bmp.LockBits(
+            new DRectangle(0, 0, bmp.Width, bmp.Height),
+            ImageLockMode.ReadOnly,
+            DPixelFormat.Format32bppArgb);
+        try
+        {
+            var wb = new WriteableBitmap(bmp.Width, bmp.Height, 96, 96, PixelFormats.Bgra32, null);
+            wb.WritePixels(
+                new Int32Rect(0, 0, bmp.Width, bmp.Height),
+                data.Scan0,
+                data.Stride * bmp.Height,
+                data.Stride);
+            wb.Freeze();
+            return wb;
+        }
+        finally
+        {
+            bmp.UnlockBits(data);
+        }
     }
 }

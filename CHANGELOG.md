@@ -4,6 +4,53 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Offline translation. Pick **Offline** as the translation engine and download the languages
+  you need (about 150 MB each, once); after that WinLens translates with no network, no rate
+  limits and nothing leaving your PC. Chinese, Japanese, Italian, German, French, Spanish,
+  Portuguese and Russian both ways, Korean into other languages. Google stays the default,
+  and when it can't be reached WinLens now falls back to any offline languages you downloaded.
+
+## [1.3.0] - 2026-10-14
+
+### Added
+- Region capture: a second shortcut (default <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>)
+  lets you drag a rectangle and translate just that area.
+- Choice of translation engine. Google stays the default and still needs no setup; you can
+  now use your own LibreTranslate server or a local AI model (Ollama, LM Studio, llama.cpp),
+  so your text never leaves your PC. "Test connection" checks the settings, and API keys are
+  stored encrypted for your Windows account.
+- Shortcuts are edited inline in the settings window, with a clear message when a
+  combination is reserved by Windows or already taken.
+
+### Changed
+- The translate shortcut reads only the monitor your cursor is on, so your other screens stay
+  usable while a translation is open.
+- A whole screen is translated in one request instead of one request per line: faster, and far
+  fewer "too many requests" errors from Google. Translations are the same or slightly better,
+  since each line keeps its neighbours as context.
+- OCR picks recognizers by the script they actually read (Cyrillic, Greek, Arabic, Hebrew,
+  Devanagari, Thai and CJK), instead of only Latin vs CJK.
+- The first-run target language follows the Windows display language.
+- A tidier settings window: shorter engine names and less explanatory text.
+
+### Fixed
+- Overlays, the region selector and the spinner stay on the right screen, at the right size, on
+  multi-monitor setups with different scaling.
+- Switching the overlay language twice in a row no longer mixes the two languages, and an error
+  there no longer closes the app.
+- MyMemory quota and error messages are no longer shown as if they were translations.
+- A settings file briefly locked by antivirus or OneDrive is no longer reset to defaults, and a
+  damaged one is kept as `settings.json.bad`.
+- Global shortcuts no longer stay disabled after leaving the shortcut editor half-way.
+- "Launch at startup" shows the real state, including when it was disabled in Task Manager.
+- "Translate now" in the settings window brings the window back afterwards.
+- After a failed translation, the spinner no longer covers the error message.
+- Memory used for the screenshot is fully returned after each translation.
+- Scrolling the settings with the pointer over a dropdown no longer changes its selection.
+
 ## [1.2.0] - 2026-05-25
 
 ### Added
@@ -57,6 +104,7 @@ First public release.
 - Per-monitor-v2 DPI awareness and multi-monitor virtual-screen capture.
 - `--settings` and `--translate` command-line flags.
 
+[1.3.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.3.0
 [1.2.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.2.0
 [1.1.1]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.1.1
 [1.1.0]: https://github.com/marco-beltrame/WinLens/releases/tag/v1.1.0
