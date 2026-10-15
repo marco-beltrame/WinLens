@@ -1,24 +1,100 @@
 {
-  "zh-en": [{ "model": "Helsinki-NLP/opus-mt-zh-en" }],
-  "en-zh": [{ "model": "Helsinki-NLP/opus-mt-en-zh", "prefix": ">>cmn_Hans<<" }],
-  "ja-en": [{ "model": "Helsinki-NLP/opus-mt-ja-en" }],
-  "en-ja": [{ "model": "Helsinki-NLP/opus-tatoeba-en-ja", "prefix": ">>jpn<<" },
-            { "model": "Helsinki-NLP/opus-tatoeba-en-ja" }],
-  "ko-en": [{ "model": "Helsinki-NLP/opus-mt-ko-en" }],
-  "en-ko": [{ "model": "Helsinki-NLP/opus-mt-tc-big-en-ko", "prefix": ">>kor<<" },
-            { "model": "Helsinki-NLP/opus-mt-tc-big-en-ko" }],
-  "it-en": [{ "model": "Helsinki-NLP/opus-mt-it-en" }],
-  "en-it": [{ "model": "Helsinki-NLP/opus-mt-en-it" }],
-  "de-en": [{ "model": "Helsinki-NLP/opus-mt-de-en" }],
-  "en-de": [{ "model": "Helsinki-NLP/opus-mt-en-de" }],
-  "fr-en": [{ "model": "Helsinki-NLP/opus-mt-fr-en" }],
-  "en-fr": [{ "model": "Helsinki-NLP/opus-mt-en-fr" }],
-  "es-en": [{ "model": "Helsinki-NLP/opus-mt-es-en" }],
-  "en-es": [{ "model": "Helsinki-NLP/opus-mt-en-es" }],
-  "pt-en": [{ "model": "Helsinki-NLP/opus-mt-tc-big-pt-en" },
-            { "model": "Helsinki-NLP/opus-mt-ROMANCE-en" }],
-  "en-pt": [{ "model": "Helsinki-NLP/opus-mt-tc-big-en-pt", "prefix": ">>por<<" },
-            { "model": "Helsinki-NLP/opus-mt-en-ROMANCE", "prefix": ">>pt_br<<" }],
-  "ru-en": [{ "model": "Helsinki-NLP/opus-mt-ru-en" }],
-  "en-ru": [{ "model": "Helsinki-NLP/opus-mt-en-ru" }]
+  "zh-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-zh-en"
+    }
+  ],
+  "en-zh": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-zh",
+      "prefix": ">>cmn_Hans<<"
+    }
+  ],
+  "ja-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-ja-en"
+    }
+  ],
+  "en-ja": [
+    {
+      "model": "Helsinki-NLP/opus-tatoeba-en-ja",
+      "prefix": ">>jpn<<"
+    },
+    {
+      "model": "Helsinki-NLP/opus-tatoeba-en-ja"
+    }
+  ],
+  "ko-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-ko-en"
+    }
+  ],
+  "it-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-it-en"
+    }
+  ],
+  "en-it": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-it"
+    }
+  ],
+  "de-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-de-en"
+    }
+  ],
+  "en-de": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-de"
+    }
+  ],
+  "fr-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-fr-en"
+    }
+  ],
+  "en-fr": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-fr"
+    }
+  ],
+  "es-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-es-en"
+    }
+  ],
+  "en-es": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-es"
+    }
+  ],
+  "pt-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-tc-big-pt-en"
+    },
+    {
+      "model": "Helsinki-NLP/opus-mt-ROMANCE-en"
+    }
+  ],
+  "en-pt": [
+    {
+      "model": "Helsinki-NLP/opus-mt-tc-big-en-pt",
+      "prefix": ">>por<<"
+    },
+    {
+      "model": "Helsinki-NLP/opus-mt-en-ROMANCE",
+      "prefix": ">>pt_br<<"
+    }
+  ],
+  "ru-en": [
+    {
+      "model": "Helsinki-NLP/opus-mt-ru-en"
+    }
+  ],
+  "en-ru": [
+    {
+      "model": "Helsinki-NLP/opus-mt-en-ru"
+    }
+  ]
 }
