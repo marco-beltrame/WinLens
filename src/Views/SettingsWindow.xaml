@@ -91,6 +91,7 @@
                     <ComboBoxItem Tag="google" Content="Google Translate"/>
                     <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
                     <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
+                    <ComboBoxItem Tag="offline" Content="Offline"/>
                 </ComboBox>
                 <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
                            TextWrapping="Wrap"/>
@@ -113,22 +114,6 @@
 
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                            <TextBlock Text="Use Google as a backup" Foreground="{StaticResource TextBrush}"
-                                       FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="For lines your server can't translate. Off keeps your text on your server."
-                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
-                                  VerticalAlignment="Center"
-                                  Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"/>
-                    </Grid>
-
-                    <Grid Margin="0,14,0,0">
-                        <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -139,6 +124,53 @@
                                    Foreground="{StaticResource TextSubtleBrush}"/>
                     </Grid>
                 </StackPanel>
+
+                <!-- Offline languages, downloaded on demand -->
+                <StackPanel x:Name="OfflinePanel" Visibility="Collapsed">
+                    <TextBlock Text="LANGUAGES" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
+                    <Border Background="{StaticResource SurfaceAltBrush}" CornerRadius="10"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                        <ItemsControl x:Name="OfflineList" Margin="0,4">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="14,6,8,6" MinHeight="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextBrush}" FontSize="13"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Detail}" VerticalAlignment="Center"
+                                                   Margin="0,0,10,0" FontSize="12"
+                                                   Foreground="{StaticResource TextSubtleBrush}"/>
+                                        <Button Grid.Column="2" Style="{StaticResource SecondaryButton}"
+                                                Content="{Binding Action}" Tag="{Binding}" MinWidth="96"
+                                                IsEnabled="{Binding CanAct}" Click="OnOfflineAction"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock x:Name="OfflineStatus" Visibility="Collapsed" TextWrapping="Wrap"
+                               Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
+                </StackPanel>
+
+                <Grid x:Name="FallbackPanel" Margin="0,14,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Use Google as a backup" Foreground="{StaticResource TextBrush}"
+                                   FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="FallbackCaption" Style="{StaticResource CaptionText}"
+                                   Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                              VerticalAlignment="Center"
+                              Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"/>
+                </Grid>
 
                 <!-- Shortcut: translates the monitor the cursor is on -->
                 <TextBlock Text="TRANSLATE SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>

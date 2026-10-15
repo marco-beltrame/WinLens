@@ -8,9 +8,11 @@ public enum TranslationEngine
     LibreTranslate,
     /// <summary>Any OpenAI-compatible chat server: Ollama, LM Studio, llama.cpp, vLLM…</summary>
     LocalLlm,
+    /// <summary>Opus-MT models on this PC, downloaded per language. No network once installed.</summary>
+    Offline,
 }
 
-/// <param name="Url">Server address; ignored for <see cref="TranslationEngine.Google"/>.</param>
+/// <param name="Url">Server address; ignored for Google and Offline.</param>
 /// <param name="ApiKey">Optional key, sent as LibreTranslate's api_key or as a Bearer token.</param>
 /// <param name="Model">Model name for <see cref="TranslationEngine.LocalLlm"/>; empty picks the server's first model.</param>
 /// <param name="FallbackToGoogle">

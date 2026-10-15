@@ -1,0 +1,121 @@
+name: offline-models
+
+# Builds the offline translation packs (ONNX Runtime + one zip per direction), checks them
+# against WinLens's own decoder, and on a manual run with "publish" uploads them to the
+# "offline-models" release the app downloads from. That release is separate from the app
+# releases and never marked as latest.
+on:
+  push:
+    paths:
+      - 'tools/offline-models/**'
+      - '.github/workflows/offline-models.yml'
+      - 'core/WinLens.Core/Services/Translation/Offline/**'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Upload the packs to the offline-models release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  # Must match Microsoft.ML.OnnxRuntime.Managed in core/WinLens.Core/WinLens.Core.csproj.
+  ORT_VERSION: '1.31.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        run: |
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1" "transformers==4.46.3" "optimum==1.23.3" sentencepiece sacremoses protobuf
+          pip install "onnxruntime==${ORT_VERSION}" "onnx==1.17.0"
+
+      - name: ONNX Runtime for Windows
+        run: |
+          curl -sSL -o ort.nupkg "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          mkdir -p packs
+          for rid in win-x64 win-arm64; do
+            rm -rf "rt-$rid" && mkdir "rt-$rid"
+            unzip -j -q ort.nupkg "runtimes/$rid/native/onnxruntime.dll" -d "rt-$rid"
+            (cd "rt-$rid" && zip -q "../packs/runtime-$rid.zip" onnxruntime.dll)
+          done
+
+      - name: Export models
+        run: python tools/offline-models/export.py tools/offline-models/models.json packs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packs
+          path: |
+            packs/*
+            work/fixtures.json
+
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: packs
+          path: artifact
+
+      # The same layout OfflinePacks installs to, with the Linux build of the same runtime.
+      - name: Lay out packs
+        run: |
+          root="$RUNNER_TEMP/offline"
+          mkdir -p "$root/runtime" "$root/models"
+          curl -sSL -o ort.nupkg "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg"
+          unzip -j -q ort.nupkg "runtimes/linux-x64/native/libonnxruntime.so" -d "$root/runtime"
+          touch "$root/runtime/.installed"
+          for z in artifact/packs/*.zip; do
+            name=$(basename "$z" .zip)
+            case "$name" in runtime-*) continue;; esac
+            unzip -q "$z" -d "$root/models/$name"
+            touch "$root/models/$name/.installed"
+          done
+          echo "WINLENS_OFFLINE_ROOT=$root" >> "$GITHUB_ENV"
+          echo "WINLENS_OFFLINE_FIXTURES=$PWD/artifact/work/fixtures.json" >> "$GITHUB_ENV"
+
+      - name: Test against the packs
+        run: dotnet test tests/WinLens.Core.Tests/WinLens.Core.Tests.csproj -c Release --filter "FullyQualifiedName~OfflineModelTests" --logger "console;verbosity=detailed"
+
+  publish:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packs
+          path: artifact
+
+      - name: Upload to the offline-models release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view offline-models >/dev/null 2>&1; then
+            gh release create offline-models --title "Offline translation models" --latest=false \
+              --target "${{ github.sha }}" \
+              --notes "Language packs for WinLens's Offline engine, downloaded from inside the app (Settings > Translation engine > Offline). Opus-MT models by the University of Helsinki (CC BY 4.0), converted to ONNX; ONNX Runtime by Microsoft (MIT)."
+          fi
+          # The manifest goes last: the app only sees new files once they are all there.
+          gh release upload offline-models artifact/packs/*.zip --clobber
+          gh release upload offline-models artifact/packs/manifest.json --clobber

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,6 +14,7 @@ using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
 using WinLens.Services.Translation;
+using WinLens.Services.Translation.Offline;
 
 namespace WinLens.Views;
 
@@ -43,6 +47,11 @@ public partial class SettingsWindow : Window
     /// <summary>Tries an engine configuration without making it the active one.</summary>
     private readonly Func<EngineOptions, Task<EngineTestResult>> _onTestEngine;
 
+    private readonly OfflinePacks _offlinePacks;
+
+    /// <summary>Tells the translator that offline languages were installed or removed.</summary>
+    private readonly Action _onOfflinePacksChanged;
+
     private bool _suppressEvents;
     private bool _capturing;
     private bool _capturingRegion;
@@ -53,7 +62,9 @@ public partial class SettingsWindow : Window
         Func<HotkeyModifiers, Key, HotkeyModifiers, Key, HotkeyApplyResult> onApplyHotkeys,
         Action<bool> onHotkeyCapturePaused,
         Action onEngineChanged,
-        Func<EngineOptions, Task<EngineTestResult>> onTestEngine)
+        Func<EngineOptions, Task<EngineTestResult>> onTestEngine,
+        OfflinePacks offlinePacks,
+        Action onOfflinePacksChanged)
     {
         InitializeComponent();
 
@@ -69,6 +80,9 @@ public partial class SettingsWindow : Window
         _onHotkeyCapturePaused = onHotkeyCapturePaused;
         _onEngineChanged = onEngineChanged;
         _onTestEngine = onTestEngine;
+        _offlinePacks = offlinePacks;
+        _onOfflinePacksChanged = onOfflinePacksChanged;
+        OfflineList.ItemsSource = _offlineRows;
 
         _suppressEvents = true;
 
@@ -95,6 +109,7 @@ public partial class SettingsWindow : Window
             if (_capturing || _capturingRegion)
                 _onHotkeyCapturePaused(false);
             CommitEngineFields(); // a field still being typed in never lost focus
+            _downloadCts?.Cancel();
         };
     }
 
@@ -169,9 +184,15 @@ public partial class SettingsWindow : Window
     {
         var s = _settings.Current;
         bool llm = engine == EngineNames.LocalLlm;
-        bool custom = engine != EngineNames.Google;
+        bool offline = engine == EngineNames.Offline;
+        bool server = engine is EngineNames.LibreTranslate or EngineNames.LocalLlm;
 
-        EnginePanel.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+        EnginePanel.Visibility = server ? Visibility.Visible : Visibility.Collapsed;
+        OfflinePanel.Visibility = offline ? Visibility.Visible : Visibility.Collapsed;
+        FallbackPanel.Visibility = engine != EngineNames.Google ? Visibility.Visible : Visibility.Collapsed;
+        FallbackCaption.Text = server ? "For lines your server can't translate. Off keeps your text on your server." : "";
+        FallbackCaption.Visibility = server ? Visibility.Visible : Visibility.Collapsed;
+        if (offline) _ = LoadOfflineLanguagesAsync();
         ModelPanel.Visibility = llm ? Visibility.Visible : Visibility.Collapsed;
         EngineStatus.Text = "";
 
@@ -209,7 +230,7 @@ public partial class SettingsWindow : Window
     {
         var s = _settings.Current;
         var engine = CurrentEngine;
-        if (engine == EngineNames.Google) return false;
+        if (engine is not (EngineNames.LibreTranslate or EngineNames.LocalLlm)) return false;
 
         var url = EngineUrlBox.Text.Trim();
         var key = EngineKeyBox.Password.Trim();
@@ -285,6 +306,141 @@ public partial class SettingsWindow : Window
         {
             TestEngineButton.IsEnabled = true;
         }
+    }
+
+    // ---------------- Offline languages ----------------
+
+    // Model downloads run for minutes: no timeout beyond the user's Cancel.
+    private static readonly HttpClient DownloadHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    private readonly ObservableCollection<OfflineLanguageRow> _offlineRows = new();
+    private PackManifest? _manifest;
+    private CancellationTokenSource? _downloadCts;
+    private bool _loadingManifest;
+
+    /// <summary>
+    /// Lists installed languages at once (from disk), then the downloadable ones once the
+    /// release's manifest arrives. Without a connection the installed ones still show.
+    /// </summary>
+    private async Task LoadOfflineLanguagesAsync()
+    {
+        OfflineStatus.Visibility = Visibility.Collapsed;
+        RefreshOfflineRows();
+        if (_manifest != null || _loadingManifest) return;
+
+        _loadingManifest = true;
+        try
+        {
+            _offlinePacks.CleanUpPartialDownloads();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            _manifest = await _offlinePacks.GetManifestAsync(DownloadHttp, cts.Token);
+            RefreshOfflineRows();
+        }
+        catch (Exception)
+        {
+            ShowOfflineError("Can't reach the download server.");
+        }
+        finally
+        {
+            _loadingManifest = false;
+        }
+    }
+
+    private void RefreshOfflineRows()
+    {
+        var installed = _offlinePacks.InstalledLanguages();
+        var codes = installed.Concat(_manifest?.Languages ?? Array.Empty<string>()).Distinct();
+        var target = OfflinePacks.PackCode(_settings.Current.TargetLanguage);
+        var downloading = _offlineRows.FirstOrDefault(r => r.Downloading);
+
+        var rows = codes
+            .Select(code => downloading?.Code == code ? downloading : new OfflineLanguageRow(code, LabelOf(code))
+            {
+                Installed = installed.Contains(code),
+                SizeBytes = PackSize(code),
+            })
+            // What is on disk first, then the language WinLens translates into, then A-Z.
+            .OrderByDescending(r => r.Installed)
+            .ThenByDescending(r => r.Code == target)
+            .ThenBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        _offlineRows.Clear();
+        foreach (var r in rows)
+        {
+            r.Busy = downloading != null && r != downloading;
+            _offlineRows.Add(r);
+        }
+    }
+
+    /// <summary>What still has to be downloaded for <paramref name="code"/>, runtime included.</summary>
+    private long PackSize(string code)
+    {
+        if (_manifest == null) return 0;
+        long size = 0;
+        foreach (var pair in new[] { $"{code}-en", $"en-{code}" })
+            if (!_offlinePacks.IsInstalled(pair) && _manifest.Models.TryGetValue(pair, out var m))
+                size += m.Size;
+        if (!_offlinePacks.RuntimeInstalled && _manifest.Runtime.TryGetValue(OfflinePacks.RuntimeId, out var rt))
+            size += rt.Size;
+        return size;
+    }
+
+    private static string LabelOf(string packCode)
+    {
+        // The packs use "he"; LanguageList keeps Google's older "iw".
+        var code = packCode == "he" ? "iw" : packCode;
+        foreach (var (c, label) in LanguageList.Items)
+            if (c == code) return label;
+        return packCode;
+    }
+
+    private async void OnOfflineAction(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not OfflineLanguageRow row) return;
+        OfflineStatus.Visibility = Visibility.Collapsed;
+
+        if (row.Downloading)
+        {
+            _downloadCts?.Cancel();
+            return;
+        }
+        if (row.Installed)
+        {
+            _offlinePacks.RemoveLanguage(row.Code);
+            _onOfflinePacksChanged();
+            RefreshOfflineRows();
+            return;
+        }
+        if (_manifest == null) return;
+
+        _downloadCts = new CancellationTokenSource();
+        row.Downloading = true;
+        RefreshOfflineRows();
+        try
+        {
+            var progress = new Progress<double>(p => row.Progress = p);
+            await _offlinePacks.InstallLanguageAsync(DownloadHttp, _manifest, row.Code, progress, _downloadCts.Token);
+            _onOfflinePacksChanged();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            ShowOfflineError($"Couldn't download {row.Label}. Try again.");
+        }
+        finally
+        {
+            row.Downloading = false;
+            _downloadCts.Dispose();
+            _downloadCts = null;
+            RefreshOfflineRows();
+        }
+    }
+
+    private void ShowOfflineError(string message)
+    {
+        OfflineStatus.Text = message;
+        OfflineStatus.Visibility = Visibility.Visible;
     }
 
     // ---------------- Source (OCR) language ----------------
