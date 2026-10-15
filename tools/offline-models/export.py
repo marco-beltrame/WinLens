@@ -64,9 +64,11 @@ def build(pair, spec, out_dir, work):
     shutil.rmtree(pack, ignore_errors=True)
     pack.mkdir(parents=True)
     # reduce_range keeps int8 products from saturating on x64 CPUs without VNNI (most of
-    # the PCs WinLens runs on), at a negligible cost in accuracy.
+    # the PCs WinLens runs on), at a negligible cost in accuracy. EnableSubgraph is needed
+    # because the merged decoder keeps its weights inside If branches (fp32 otherwise, 4x larger).
     for src_name, dst_name in (("encoder_model.onnx", "encoder.onnx"), ("decoder_model_merged.onnx", "decoder.onnx")):
-        quantize_dynamic(str(raw / src_name), str(pack / dst_name), weight_type=QuantType.QInt8, reduce_range=True)
+        quantize_dynamic(str(raw / src_name), str(pack / dst_name), weight_type=QuantType.QInt8, reduce_range=True,
+                         extra_options={"EnableSubgraph": True})
     tok.save_pretrained(raw / "tok")
     for name in ("source.spm", "target.spm", "vocab.json"):
         shutil.copy(raw / "tok" / name, pack / name)
