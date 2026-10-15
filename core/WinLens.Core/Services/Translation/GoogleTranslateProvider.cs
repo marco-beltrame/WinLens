@@ -34,7 +34,10 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
     // Google answers 429 (or stalls) once it decides we are too chatty; retrying it for
     // every remaining request only adds a 10 s timeout each before the fallback runs.
     // After a trip, Google is skipped until this tick count (Environment.TickCount64).
-    private const long CooldownMs = 30_000;
+    private const long RateLimitCooldownMs = 30_000;
+    // No HTTP response at all (DNS, refused, reset, TLS) or a stall means the host is
+    // unreachable, e.g. blocked networks; retrying it is pointless for a good while.
+    private const long UnreachableCooldownMs = 300_000;
     private long _blockedUntil;
 
     private readonly TranslationHttp _http;
@@ -141,8 +144,8 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
 
     private bool Blocked => Environment.TickCount64 < Interlocked.Read(ref _blockedUntil);
 
-    private void TripBreaker() =>
-        Interlocked.Exchange(ref _blockedUntil, Environment.TickCount64 + CooldownMs);
+    private void TripBreaker(long cooldownMs) =>
+        Interlocked.Exchange(ref _blockedUntil, Environment.TickCount64 + cooldownMs);
 
     /// <summary>One request to the endpoint; null on any failure.</summary>
     private Task<string?> RequestAsync(string text, string tgt, CancellationToken ct) =>
@@ -174,7 +177,7 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
                 {
                     _http.Log($"google http {(int)resp.StatusCode} for tgt={tgt}");
                     if (resp.StatusCode == HttpStatusCode.TooManyRequests)
-                        TripBreaker();
+                        TripBreaker(RateLimitCooldownMs);
                     return null;
                 }
 
@@ -215,8 +218,8 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
         {
             _http.Log($"google exception: {ex.GetType().Name}: {ex.Message}");
             // HttpClient's own timeout surfaces as a TaskCanceledException.
-            if (ex is OperationCanceledException)
-                TripBreaker();
+            if (ex is OperationCanceledException or HttpRequestException)
+                TripBreaker(UnreachableCooldownMs);
             return null;
         }
     }

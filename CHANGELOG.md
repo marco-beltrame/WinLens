@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Microsoft Translator as a backup for the default engine, still with no setup. Translation
+  now works where Google can't be reached, such as mainland China.
+
+### Changed
+- When Google can't be reached, WinLens stops trying it for a few minutes instead of waiting
+  on it for every capture, so translations arrive in seconds.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

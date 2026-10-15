@@ -26,7 +26,7 @@ internal sealed class TranslationHttp : IDisposable
         var t = timeout ?? TimeSpan.FromSeconds(10);
         _gate = new SemaphoreSlim(maxConcurrent);
         Client = handler == null
-            ? new HttpClient { Timeout = t }
+            ? new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) }) { Timeout = t }
             : new HttpClient(handler, disposeHandler: false) { Timeout = t };
         Client.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WinLens/1.0");
