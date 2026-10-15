@@ -86,7 +86,7 @@ Choose the engine under **Translation engine** in the control panel.
 | **Google Translate** (default) | None | Google's servers, with MyMemory as a fallback |
 | **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
 | **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
-| **Offline** | Download a language pack in the control panel (about 150 MB per language, once) | Nowhere: it runs on your PC, with no network |
+| **Offline** | Download a language pack in the control panel (about 160 MB per language, once) | Nowhere: it runs on your PC, with no network |
 
 With LibreTranslate, a local model or Offline, nothing is sent to Google unless you turn on
 **Use Google as a backup**. **Test connection** checks the settings before you rely on them.
@@ -101,8 +101,8 @@ Offline uses [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models from the 
 of Helsinki, quantized to int8 and run with [ONNX Runtime](https://onnxruntime.ai). A pack is
 downloaded once per language; English needs none, and other pairs go through English
 (Chinese → English → Italian). Chinese, Japanese, Italian, German, French, Spanish,
-Portuguese and Russian work both ways; Korean is translated from only. A screenful takes
-about half a second on a recent CPU (about a second between two non-English languages).
+Portuguese and Russian work both ways; Korean is translated from only. A screenful of
+Chinese takes well under a second to turn into Italian, even on a modest two-core CPU.
 
 The quality is good for short interface text and plain sentences, and below Google's for
 idioms and long, complex sentences, which is why Google stays the default. If you downloaded

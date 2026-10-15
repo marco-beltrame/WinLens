@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 - Offline translation. Pick **Offline** as the translation engine and download the languages
-  you need (about 150 MB each, once); after that WinLens translates with no network, no rate
+  you need (about 160 MB each, once); after that WinLens translates with no network, no rate
   limits and nothing leaving your PC. Chinese, Japanese, Italian, German, French, Spanish,
   Portuguese and Russian both ways, Korean into other languages. Google stays the default,
   and when it can't be reached WinLens now falls back to any offline languages you downloaded.
