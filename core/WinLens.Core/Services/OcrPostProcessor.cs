@@ -116,6 +116,41 @@ public static class OcrPostProcessor
     }
 
     /// <summary>
+    /// Windows OCR puts a space between every word, and for Chinese and Japanese a "word" is
+    /// often one character: "你 好 世 界". Those spaces aren't in the source, they make the
+    /// copied original look wrong, and they hurt translation (most of all with a local
+    /// model). Drop whitespace that sits between two Han/kana characters or CJK
+    /// punctuation; Korean (Hangul) and everything else keep their spaces.
+    /// </summary>
+    public static string JoinCjk(string text)
+    {
+        if (text.Length < 3) return text;
+        StringBuilder? sb = null;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (char.IsWhiteSpace(c) && i > 0)
+            {
+                int j = i;
+                while (j < text.Length && char.IsWhiteSpace(text[j])) j++;
+                if (j < text.Length && IsCjkJoinable(text[i - 1]) && IsCjkJoinable(text[j]))
+                {
+                    sb ??= new StringBuilder(text, 0, i, text.Length);
+                    i = j - 1;
+                    continue;
+                }
+            }
+            sb?.Append(c);
+        }
+        return sb?.ToString() ?? text;
+    }
+
+    private static bool IsCjkJoinable(char c) =>
+        GlyphOf(c) is Glyph.Han or Glyph.Kana ||
+        c >= 0x3000 && c <= 0x303F ||   // CJK punctuation (、。「」…)
+        c >= 0xFF01 && c <= 0xFF0F || c >= 0xFF1A && c <= 0xFF20;   // full-width ！，．：；？ …
+
+    /// <summary>
     /// Merge OCR fragments that sit on the same text line and are horizontally
     /// adjacent (small gap) into one block. Fixes a stray leading word (e.g. "I")
     /// being left untranslated/uncovered, and gives the translator the full sentence.
@@ -175,7 +210,7 @@ public static class OcrPostProcessor
                 }
             }
 
-            result.Add(new OcrLine(text.ToString(), rect, lang));
+            result.Add(new OcrLine(JoinCjk(text.ToString()), rect, lang));
         }
         return result;
     }
