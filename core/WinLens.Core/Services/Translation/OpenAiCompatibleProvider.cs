@@ -163,7 +163,7 @@ internal sealed class OpenAiCompatibleProvider : ITranslationProvider
             messages = new object[]
             {
                 new { role = "system", content = Prompt(target) },
-                new { role = "user", content = JsonSerializer.Serialize(texts) },
+                new { role = "user", content = JsonSerializer.Serialize(texts, UserJson) },
             },
         };
 
@@ -179,7 +179,7 @@ internal sealed class OpenAiCompatibleProvider : ITranslationProvider
             if (!resp.IsSuccessStatusCode)
             {
                 _http.Log($"local model http {(int)resp.StatusCode}: {json[..Math.Min(160, json.Length)]}");
-                return (null, true);
+                return (null, Batching.IsWorthRetryingPerLine(resp.StatusCode));
             }
 
             using var doc = JsonDocument.Parse(json);
@@ -196,7 +196,15 @@ internal sealed class OpenAiCompatibleProvider : ITranslationProvider
         }
     }
 
-    private static readonly Regex ThinkBlock = new(@"<think>.*?</think>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+    // Non-Latin text goes to the model as-is, not as \uXXXX escapes: small local models
+    // translate escaped text much worse, and it costs several times the tokens.
+    private static readonly JsonSerializerOptions UserJson = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    // A reply cut off by the token limit can leave the reasoning block unclosed.
+    private static readonly Regex ThinkBlock = new(@"<think>.*?(</think>|$)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Pulls the JSON array out of a model reply: reasoning models prepend a &lt;think&gt;

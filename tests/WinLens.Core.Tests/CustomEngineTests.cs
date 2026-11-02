@@ -199,6 +199,59 @@ public class CustomEngineTests
         Assert.False(result.Ok);
         Assert.Contains("server address", result.Message);
     }
+
+    // ---------------- Failures that a per-line retry can't fix ----------------
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task Llm_HopelessStatus_IsNotRetriedLineByLine(HttpStatusCode status)
+    {
+        var r = new Router((_, _) => Json(new { error = "nope" }, status));
+        using var svc = Make(r, new EngineOptions(TranslationEngine.LocalLlm, "http://localhost:11434", Model: "m"));
+        await svc.TranslateManyAsync(Lines("one", "two", "three"), "it");
+        Assert.Single(r.Calls, c => c.Path.EndsWith("/chat/completions"));
+    }
+
+    [Fact]
+    public async Task Libre_BadKey_IsNotRetriedLineByLine()
+    {
+        var r = new Router((req, _) => req.RequestUri!.AbsolutePath.EndsWith("/languages")
+            ? Json(LibreLanguages)
+            : Json(new { error = "Invalid API key" }, HttpStatusCode.Forbidden));
+        using var svc = Make(r, new EngineOptions(TranslationEngine.LibreTranslate, "localhost:5000", "bad"));
+        await svc.TranslateManyAsync(Lines("one", "two", "three"), "it");
+        Assert.Single(r.Calls, c => c.Path.EndsWith("/translate"));
+    }
+
+    [Fact]
+    public async Task Llm_SendsNonLatinTextUnescaped()
+    {
+        string? sent = null;
+        var r = new Router((_, body) =>
+        {
+            sent = JsonDocument.Parse(body!).RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
+            return Chat("""["Hello"]""");
+        });
+        using var svc = Make(r, new EngineOptions(TranslationEngine.LocalLlm, "http://localhost:11434", Model: "m"));
+        await svc.TranslateManyAsync(Lines("你好"), "en");
+        Assert.Equal("""["你好"]""", sent);
+    }
+
+    [Fact]
+    public void Llm_ParseReply_DropsAnUnclosedThinkBlock() =>
+        Assert.Null(OpenAiCompatibleProvider.ParseReply("<think>maybe [\"x\"] or", 1));
+
+    [Theory]
+    [InlineData("jw", "jv")]
+    [InlineData("no", "nb")]
+    public void Libre_MapsGoogleLegacyCodes(string ours, string expected)
+    {
+        var codes = new HashSet<string>(new[] { "en", "jv", "nb" }, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(expected, LibreTranslateProvider.MapCode(ours, codes));
+    }
 }
 
 public class EngineNamesTests

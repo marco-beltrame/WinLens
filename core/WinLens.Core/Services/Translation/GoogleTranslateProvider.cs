@@ -124,7 +124,10 @@ internal sealed class GoogleTranslateProvider : ITranslationProvider
     private static string Skeleton(string s)
     {
         var sb = new StringBuilder(s.Length);
-        foreach (var c in s.Normalize(NormalizationForm.FormD))
+        string decomposed;
+        try { decomposed = s.Normalize(NormalizationForm.FormD); }
+        catch (ArgumentException) { decomposed = s; } // a lone surrogate from OCR
+        foreach (var c in decomposed)
         {
             if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
             if (char.IsLetterOrDigit(c)) sb.Append(c);
