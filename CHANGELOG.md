@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- On the overlay, <kbd>Ctrl</kbd> + <kbd>C</kbd> copies the whole translation, top to bottom.
+- Hold <kbd>Space</kbd> on the overlay to see the original text; release it to bring the
+  translation back.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added

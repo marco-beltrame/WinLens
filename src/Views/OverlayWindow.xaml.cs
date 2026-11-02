@@ -92,6 +92,10 @@ public partial class OverlayWindow : Window
         PopulateLanguages();
 
         KeyDown += OnKeyDown;
+        // Preview: Space must reach us even when the language box has keyboard focus.
+        PreviewKeyDown += OnPreviewKeyDown;
+        PreviewKeyUp += OnPreviewKeyUp;
+        Deactivated += (_, _) => ShowOriginal(false);
         // OverlayCanvas sits on top and fills the window, so it receives every click that
         // a translation box doesn't handle first — including clicks over the dimmed area.
         OverlayCanvas.MouseLeftButtonDown += (_, _) => Close();
@@ -446,6 +450,35 @@ public partial class OverlayWindow : Window
     {
         if (e.Key == Key.Escape) Close();
     }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (LanguageBox.IsDropDownOpen) return;
+
+        // Hold Space to peek at the original text under the translation.
+        if (e.Key == Key.Space)
+        {
+            ShowOriginal(true);
+            e.Handled = true;
+        }
+        // Ctrl+C copies the whole translation, top to bottom.
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            var text = string.Join(Environment.NewLine, _blocks
+                .OrderBy(b => b.BoundingRect.Y).ThenBy(b => b.BoundingRect.X)
+                .Select(b => string.IsNullOrWhiteSpace(b.TranslatedText) ? b.OriginalText : b.TranslatedText));
+            try { Clipboard.SetText(text); } catch { /* clipboard busy */ }
+            e.Handled = true;
+        }
+    }
+
+    private void OnPreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space) ShowOriginal(false);
+    }
+
+    private void ShowOriginal(bool show) =>
+        OverlayCanvas.Opacity = show ? 0 : 1; // Opacity, not Visibility: it keeps swallowing clicks
 
     /// <summary>
     /// Copies the screenshot into a frozen WPF bitmap. This used to encode the whole

@@ -64,7 +64,8 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Global hotkey, default <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>.
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
 - Dark control panel. You can change the target language straight from the overlay.
-- Right-click a block to copy the original text or the translation.
+- Right-click a block to copy the original text or the translation, or press <kbd>Ctrl</kbd> + <kbd>C</kbd> to copy the whole translation.
+- Hold <kbd>Space</kbd> to see the original text under the translation.
 - Works out of the box with Google Translate, or with your own LibreTranslate server or a local AI model (Ollama, LM Studio) so your text never leaves your PC.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
@@ -144,6 +145,8 @@ installed languages show up automatically.
 | Change the hotkey | Control panel > Change, then press your combination |
 | Pick the source (OCR) language | Control panel > Detect text in (leave on Auto unless you need speed) |
 | Copy text | Right-click a translated block > Copy original / Copy translation |
+| Copy the whole translation | <kbd>Ctrl</kbd> + <kbd>C</kbd> on the overlay |
+| See the original | Hold <kbd>Space</kbd> on the overlay |
 | Launch at startup | Control panel toggle |
 | Quit | Tray menu > Exit |
 
