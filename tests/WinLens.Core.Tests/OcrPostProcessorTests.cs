@@ -132,4 +132,18 @@ public class OcrPostProcessorTests
     [Fact]
     public void ScriptCount_CoversAllScripts() =>
         Assert.Equal(Enum.GetValues<OcrScript>().Length, OcrPostProcessor.ScriptCount);
+
+    [Fact]
+    public void Merge_FirstWordSittingLower_StillComesFirst()
+    {
+        // "think so" is a pixel higher, so it is the seed; "I" sits to its left.
+        var r = OcrPostProcessor.MergeLineFragments(new()
+        {
+            L("I", 0, 11, 10, 10),
+            L("think so", 14, 10, 60, 10),
+        });
+        var m = Assert.Single(r);
+        Assert.Equal("I think so", m.Text);
+        Assert.Equal(new OcrRect(0, 10, 74, 11), m.Rect);
+    }
 }

@@ -1,10 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 
 namespace WinLens.Services.Translation;
 
 internal static class Batching
 {
+    /// <summary>
+    /// True when a refused batch might still go through line by line (the server rejected
+    /// the request's shape). Auth, missing model, rate limits and server errors would fail
+    /// for every line too, so retrying each one only multiplies the wait and the load.
+    /// </summary>
+    public static bool IsWorthRetryingPerLine(HttpStatusCode status) => status switch
+    {
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound or
+        HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable or
+        HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout => false,
+        _ => true,
+    };
+
     /// <summary>Splits item indexes into runs of at most <paramref name="maxChars"/> characters and <paramref name="maxItems"/> items.</summary>
     public static List<List<int>> Chunk(IReadOnlyList<int> indexes, Func<int, int> lengthOf, int maxChars, int maxItems)
     {

@@ -82,7 +82,8 @@ internal sealed class MyMemoryProvider : ITranslationProvider
                     _http.Log($"mymemory rejected message: {output}");
                     return null;
                 }
-                return output;
+                // MyMemory often hands back HTML entities ("L&#39;eau").
+                return System.Net.WebUtility.HtmlDecode(output);
             }
             return null;
         }

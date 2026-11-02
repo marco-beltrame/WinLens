@@ -125,7 +125,8 @@ public sealed class TranslationService : IDisposable
             list.Add(i);
         }
 
-        foreach (var provider in _providers) // a snapshot: Configure swaps the array
+        var chain = _providers; // a snapshot: Configure swaps the array
+        foreach (var provider in chain)
         {
             if (pending.Count == 0)
                 break;
@@ -140,7 +141,9 @@ public sealed class TranslationService : IDisposable
                     failed.Add(pending[k]);
                     continue;
                 }
-                Store((text, tgt), done);
+                // An engine switched mid-request must not seed the new engine's cache.
+                if (ReferenceEquals(chain, _providers))
+                    Store((text, tgt), done);
                 foreach (var i in slots[text])
                     results[i] = done;
             }

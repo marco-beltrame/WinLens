@@ -71,12 +71,6 @@ public static class OcrPostProcessor
     // Per-character writing system.
     private enum Glyph { Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Thai, Han, Kana, Hangul }
 
-    internal static bool IsCjk(char c) =>
-        (c >= 0x4E00 && c <= 0x9FFF) ||  // CJK Unified Ideographs
-        (c >= 0x3400 && c <= 0x4DBF) ||  // Extension A
-        (c >= 0x3040 && c <= 0x30FF) ||  // Hiragana + Katakana
-        (c >= 0xAC00 && c <= 0xD7AF);    // Hangul syllables
-
     private static Glyph GlyphOf(char c)
     {
         if (c >= 0x4E00 && c <= 0x9FFF || c >= 0x3400 && c <= 0x4DBF) return Glyph.Han;
@@ -161,17 +155,20 @@ public static class OcrPostProcessor
                     if (Math.Abs(centerA - centerB) >= 0.6 * Math.Min(rect.Height, rb.Height))
                         continue; // not on the same line
 
-                    // Only absorb a fragment that follows closely on the right (or overlaps).
-                    double gap = rb.X - (rect.X + rect.Width);
+                    // Absorb a fragment that sits close on either side (or overlaps). The
+                    // seed is the highest fragment, which with a pixel of Y jitter can be
+                    // the second word of the line rather than the first.
+                    bool before = rb.X + rb.Width / 2 < rect.X + rect.Width / 2;
+                    double gap = before ? rect.X - (rb.X + rb.Width) : rb.X - (rect.X + rect.Width);
                     if (gap > 1.2 * Math.Max(rect.Height, rb.Height)) continue;
-                    if (rb.X + rb.Width < rect.X) continue; // fully to the left
 
                     double nx = Math.Min(rect.X, rb.X);
                     double ny = Math.Min(rect.Y, rb.Y);
                     double nr = Math.Max(rect.X + rect.Width, rb.X + rb.Width);
                     double nb = Math.Max(rect.Y + rect.Height, rb.Y + rb.Height);
                     rect = new OcrRect(nx, ny, nr - nx, nb - ny);
-                    text.Append(' ').Append(ordered[j].Text);
+                    if (before) text.Insert(0, ordered[j].Text + " ");
+                    else text.Append(' ').Append(ordered[j].Text);
 
                     used[j] = true;
                     extended = true;

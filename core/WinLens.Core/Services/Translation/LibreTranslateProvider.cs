@@ -78,14 +78,15 @@ internal sealed class LibreTranslateProvider : ITranslationProvider
         if (_base == null)
             return new(false, "Enter the server address, for example http://localhost:5000.");
         var codes = await LoadServerCodesAsync(ct);
-        if (codes == null)
-            return new(false, $"No LibreTranslate server answered at {_base}.");
-        var tgt = MapCode(target, codes);
+        // Same rule as TranslateAsync: without /languages, try our own code.
+        var tgt = codes == null ? target : MapCode(target, codes);
         if (tgt == null)
             return new(false, "This server can't translate into the selected language.");
-        var (result, _) = await RequestAsync(new[] { phrase }, tgt, ct);
-        return result?[0] is string sample
-            ? new(true, "Connected.", sample)
+        var (result, reached) = await RequestAsync(new[] { phrase }, tgt, ct);
+        if (result?[0] is string sample)
+            return new(true, "Connected.", sample);
+        return codes == null && !reached
+            ? new(false, $"No LibreTranslate server answered at {_base}.")
             : new(false, "The server answered but didn't translate. Check the API key.");
     }
 
@@ -107,6 +108,9 @@ internal sealed class LibreTranslateProvider : ITranslationProvider
             "zh" or "zh-cn" => new[] { "zh-Hans", "zh" },
             "zh-tw" => new[] { "zh-Hant", "zt" },
             "iw" or "he" => new[] { "he", "iw" },
+            // LanguageList keeps Google's legacy codes; Libre servers use the ISO ones.
+            "jw" or "jv" => new[] { "jv", "jw" },
+            "no" or "nb" => new[] { "nb", "no" },
             _ => new[] { target, target.Split('-')[0] },
         };
         foreach (var c in candidates)
@@ -160,7 +164,7 @@ internal sealed class LibreTranslateProvider : ITranslationProvider
             if (!resp.IsSuccessStatusCode)
             {
                 _http.Log($"libretranslate http {(int)resp.StatusCode}: {json[..Math.Min(120, json.Length)]}");
-                return (null, true);
+                return (null, Batching.IsWorthRetryingPerLine(resp.StatusCode));
             }
 
             using var doc = JsonDocument.Parse(json);
