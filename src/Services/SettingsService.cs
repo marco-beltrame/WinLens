@@ -98,9 +98,8 @@ public sealed class SettingsService
     }
 
     /// <summary>Reads settings.json, retrying briefly on sharing violations; null if it stays locked.</summary>
-    private static string? ReadWithRetry()
+    private static string? ReadWithRetry(int attempts = 4)
     {
-        const int attempts = 4;
         for (int i = 0; i < attempts; i++)
         {
             try { return File.ReadAllText(FilePath); }
@@ -150,7 +149,8 @@ public sealed class SettingsService
         {
             // The file existed but was locked at startup. Only write once it can be read
             // again, so a transient lock never costs the user their saved settings.
-            if (File.Exists(FilePath) && ReadWithRetry() == null) return;
+            // One attempt, no sleeping: Save runs on the UI thread on every change.
+            if (File.Exists(FilePath) && ReadWithRetry(attempts: 1) == null) return;
             _unreadable = false;
         }
         WriteAtomic(JsonSerializer.Serialize(settings, Json));
