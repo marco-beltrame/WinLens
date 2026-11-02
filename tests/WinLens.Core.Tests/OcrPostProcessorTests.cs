@@ -146,4 +146,26 @@ public class OcrPostProcessorTests
         Assert.Equal("I think so", m.Text);
         Assert.Equal(new OcrRect(0, 10, 74, 11), m.Rect);
     }
+
+    [Theory]
+    [InlineData("你 好 世 界", "你好世界")]
+    [InlineData("こ れ は テ ス ト 。", "これはテスト。")]
+    [InlineData("设置 ( S )", "设置 ( S )")]       // Latin neighbours keep their spaces
+    [InlineData("WinLens 翻 译 工 具", "WinLens 翻译工具")]
+    [InlineData("안녕 하세요", "안녕 하세요")]       // Korean uses spaces between words
+    [InlineData("hello world", "hello world")]
+    [InlineData("你 好 ， 世 界", "你好，世界")]
+    public void JoinCjk_DropsOcrSpacesBetweenCjkCharacters(string input, string expected) =>
+        Assert.Equal(expected, OcrPostProcessor.JoinCjk(input));
+
+    [Fact]
+    public void Merge_CjkFragments_JoinWithoutSpace()
+    {
+        var r = OcrPostProcessor.MergeLineFragments(new()
+        {
+            L("你好", 0, 0, 20, 10),
+            L("世界", 22, 0, 20, 10),
+        });
+        Assert.Equal("你好世界", Assert.Single(r).Text);
+    }
 }

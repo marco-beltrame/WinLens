@@ -183,7 +183,7 @@ public sealed class OcrService
             // Map back from upscaled image coords to original screenshot pixels.
             blocks.Add(new OcrBlock
             {
-                OriginalText = line.Text,
+                OriginalText = OcrPostProcessor.JoinCjk(line.Text),
                 BoundingRect = new Rect(minX / scale, minY / scale,
                                         (maxX - minX) / scale, (maxY - minY) / scale),
                 DetectedLanguage = engine.RecognizerLanguage?.LanguageTag,
