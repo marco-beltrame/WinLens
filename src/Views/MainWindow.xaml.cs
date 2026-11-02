@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -19,6 +20,8 @@ public partial class MainWindow : Window, IDisposable
     // is dispatched by id, so they must not collide.
     private const int FullScreenHotkeyId = 0xB001;
     private const int RegionHotkeyId     = 0xB002;
+    // Esc while the spinner shows; registered only for that moment (see RunTranslateAsync).
+    private const int CancelHotkeyId     = 0xB003;
 
     private readonly SettingsService _settings = new();
     private readonly OcrService _ocr = new();
@@ -236,6 +239,8 @@ public partial class MainWindow : Window, IDisposable
         OverlayWindow? overlay = null;
         System.Drawing.Bitmap? ownedBitmap = null;
         bool restoreSettings = reopenSettings;
+        using var cancel = new CancellationTokenSource();
+        GlobalHotkey? escape = null;
         try
         {
             // A still-open overlay must not end up in the new screenshot — we'd OCR our
@@ -285,7 +290,16 @@ public partial class MainWindow : Window, IDisposable
             loading = new LoadingOverlay();
             loading.ShowCenteredOn(capture.Bounds);
 
+            // Esc cancels while we wait (a slow local model can take a while). The spinner
+            // never takes focus, so the key has to be caught system-wide — and released
+            // again before the overlay opens, which handles Esc itself.
+            escape = new GlobalHotkey(this, CancelHotkeyId);
+            escape.Pressed += () => cancel.Cancel();
+            try { escape.Register(HotkeyModifiers.None, Key.Escape); }
+            catch (InvalidOperationException) { /* another app holds Esc: no cancel this time */ }
+
             var blocks = await _ocr.RecognizeAsync(capture.Bitmap, _settings.Current.SourceLanguage);
+            cancel.Token.ThrowIfCancellationRequested();
             if (blocks.Count == 0)
             {
                 ownedBitmap.Dispose();
@@ -296,7 +310,9 @@ public partial class MainWindow : Window, IDisposable
             }
 
             var target = _settings.Current.TargetLanguage;
-            await TranslateBlocksAsync(blocks, target);
+            await TranslateBlocksAsync(blocks, target, cancel.Token);
+            escape.Dispose();
+            escape = null;
 
             // Never spills onto a monitor we did not capture (see OverlayLayout).
             var windowBounds = OverlayLayout.WindowBounds(
@@ -335,6 +351,10 @@ public partial class MainWindow : Window, IDisposable
 
             WarnIfNothingChanged(blocks, target);
         }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            // Cancelled with Esc: the finally block cleans up, nothing to report.
+        }
         catch (Exception ex)
         {
             // Clear our own windows first: the spinner must not sit over the message, and an
@@ -351,6 +371,7 @@ public partial class MainWindow : Window, IDisposable
         }
         finally
         {
+            escape?.Dispose();
             ownedBitmap?.Dispose(); // reached only when the overlay never took ownership
             loading?.Close();
             if (restoreSettings && _overlay == null)
@@ -359,11 +380,12 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    private async Task TranslateBlocksAsync(System.Collections.Generic.List<OcrBlock> blocks, string target)
+    private async Task TranslateBlocksAsync(
+        System.Collections.Generic.List<OcrBlock> blocks, string target, CancellationToken ct)
     {
         var translated = await _translator.TranslateManyAsync(
             blocks.Select(b => new TranslationRequest(b.OriginalText, b.DetectedLanguage)).ToArray(),
-            target);
+            target, ct);
         for (int i = 0; i < blocks.Count; i++)
             blocks[i].TranslatedText = translated[i];
     }
