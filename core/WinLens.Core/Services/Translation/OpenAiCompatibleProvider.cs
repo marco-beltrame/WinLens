@@ -70,27 +70,9 @@ internal sealed class OpenAiCompatibleProvider : ITranslationProvider
         if (await ModelAsync(ct) is not string model)
             return results;
 
-        var chunks = Batching.Chunk(Enumerable.Range(0, items.Count).ToArray(),
-            i => items[i].Text.Length, MaxBatchChars, MaxBatchLines);
-        await Task.WhenAll(chunks.Select(async chunk =>
-        {
-            var texts = chunk.Select(i => items[i].Text).ToArray();
-            var (translated, reached) = await _http.GatedAsync(() => RequestAsync(model, texts, target, ct), ct);
-            if (translated == null && reached && chunk.Count > 1)
-            {
-                _http.Log($"local model: unusable reply for {chunk.Count} lines; retrying one by one");
-                translated = new string?[chunk.Count];
-                for (int k = 0; k < chunk.Count; k++)
-                {
-                    var (one, _) = await _http.GatedAsync(() => RequestAsync(model, new[] { texts[k] }, target, ct), ct);
-                    translated[k] = one?[0];
-                }
-            }
-            if (translated == null) return;
-            for (int k = 0; k < chunk.Count; k++)
-                results[chunk[k]] = translated[k];
-        }));
-        return results;
+        return await Batching.TranslateInChunksAsync(_http, items, MaxBatchChars, MaxBatchLines,
+            texts => RequestAsync(model, texts, target, ct),
+            n => _http.Log($"local model: unusable reply for {n} lines; retrying one by one"), ct);
     }
 
     /// <summary>Asks the model to translate one phrase, for the "Test connection" button.</summary>

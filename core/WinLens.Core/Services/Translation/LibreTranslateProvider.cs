@@ -48,28 +48,9 @@ internal sealed class LibreTranslateProvider : ITranslationProvider
         if (tgt == null)
             return results;
 
-        var chunks = Batching.Chunk(Enumerable.Range(0, items.Count).ToArray(),
-            i => items[i].Text.Length, MaxBatchChars, MaxBatchLines);
-        await Task.WhenAll(chunks.Select(async chunk =>
-        {
-            var texts = chunk.Select(i => items[i].Text).ToArray();
-            var (translated, reached) = await _http.GatedAsync(() => RequestAsync(texts, tgt, ct), ct);
-            if (translated == null && reached && chunk.Count > 1)
-            {
-                // The server answered but refused the batch (older servers take a single
-                // string only): ask line by line. An unreachable server is not retried.
-                translated = new string?[chunk.Count];
-                for (int k = 0; k < chunk.Count; k++)
-                {
-                    var (one, _) = await _http.GatedAsync(() => RequestAsync(new[] { texts[k] }, tgt, ct), ct);
-                    translated[k] = one?[0];
-                }
-            }
-            if (translated == null) return;
-            for (int k = 0; k < chunk.Count; k++)
-                results[chunk[k]] = translated[k];
-        }));
-        return results;
+        // Older servers take a single string only: Batching retries those line by line.
+        return await Batching.TranslateInChunksAsync(_http, items, MaxBatchChars, MaxBatchLines,
+            texts => RequestAsync(texts, tgt, ct), null, ct);
     }
 
     /// <summary>Asks the server to translate one phrase, for the "Test connection" button.</summary>
