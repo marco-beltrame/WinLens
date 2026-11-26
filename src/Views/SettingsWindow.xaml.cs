@@ -185,7 +185,7 @@ public partial class SettingsWindow : Window
         EngineCaption.Visibility = EngineCaption.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         EngineUrlBox.Text = llm ? s.LlmUrl : s.LibreTranslateUrl;
-        EngineUrlBox.Tag = llm ? "http://localhost:11434/v1" : "http://localhost:5000";
+        EngineUrlBox.Tag = llm ? UserSettings.DefaultLlmUrl : "http://localhost:5000";
         EngineModelBox.Text = s.LlmModel;
         EngineKeyBox.Password = (llm ? SecretStore.Unprotect(s.LlmKeyProtected)
                                      : SecretStore.Unprotect(s.LibreTranslateKeyProtected)) ?? "";
@@ -217,8 +217,11 @@ public partial class SettingsWindow : Window
         if (engine == EngineNames.LocalLlm)
         {
             var model = EngineModelBox.Text.Trim();
+            // An empty box means the default address: compare against that, or every
+            // focus loss would count as a change and save (and re-encrypt the key) again.
+            if (url.Length == 0) url = UserSettings.DefaultLlmUrl;
             changed = url != s.LlmUrl || model != s.LlmModel || key != (SecretStore.Unprotect(s.LlmKeyProtected) ?? "");
-            s.LlmUrl = url.Length == 0 ? "http://localhost:11434/v1" : url;
+            s.LlmUrl = url;
             s.LlmModel = model;
             if (changed) s.LlmKeyProtected = SecretStore.Protect(key);
         }
