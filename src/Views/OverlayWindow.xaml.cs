@@ -461,8 +461,10 @@ public partial class OverlayWindow : Window
             ShowOriginal(true);
             e.Handled = true;
         }
-        // Ctrl+C copies the whole translation, top to bottom.
-        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+        // Ctrl+C copies the whole translation, top to bottom — unless some text is
+        // selected in one of the boxes: then it is the usual copy of that selection.
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
+                 && Keyboard.FocusedElement is not TextBox { SelectionLength: > 0 })
         {
             var text = string.Join(Environment.NewLine, _blocks
                 .OrderBy(b => b.BoundingRect.Y).ThenBy(b => b.BoundingRect.X)
