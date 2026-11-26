@@ -51,7 +51,31 @@ public sealed class OcrService
     /// installed recognizer is chosen automatically; otherwise that specific recognizer is used.
     /// The image is upscaled before recognition; returned coordinates are in ORIGINAL pixels.
     /// </summary>
-    public async Task<List<OcrBlock>> RecognizeAsync(Bitmap bitmap, string? sourceLang = null)
+    /// <param name="groupParagraphs">
+    /// Return wrapped lines of one paragraph as a single block, so they are translated
+    /// together. Off gives one block per line.
+    /// </param>
+    public async Task<List<OcrBlock>> RecognizeAsync(
+        Bitmap bitmap, string? sourceLang = null, bool groupParagraphs = true)
+    {
+        var lines = await RecognizeLinesAsync(bitmap, sourceLang);
+        return groupParagraphs
+            ? ParagraphGrouper.Group(lines).Select(ToBlock).ToList()
+            : lines.Select(l => ToBlock(new OcrParagraph(l.Text, new[] { l }, l.Rect, ParagraphAlignment.Left))).ToList();
+    }
+
+    private static OcrBlock ToBlock(OcrParagraph p) => new()
+    {
+        OriginalText = p.Text,
+        BoundingRect = ToRect(p.Bounds),
+        LineRects = p.Lines.Select(l => ToRect(l.Rect)).ToArray(),
+        Alignment = p.Alignment,
+        DetectedLanguage = p.Language,
+    };
+
+    private static Rect ToRect(OcrRect r) => new(r.X, r.Y, r.Width, r.Height);
+
+    private async Task<List<OcrLine>> RecognizeLinesAsync(Bitmap bitmap, string? sourceLang)
     {
         // The upscale and the copy take hundreds of ms on a 4K screen: keep them off the
         // UI thread so the spinner keeps turning. The caller awaits, so nothing else
@@ -82,7 +106,7 @@ public sealed class OcrService
             {
                 var engine = TryCreate(sourceLang);
                 if (engine != null)
-                    return MergeLineFragments(await RunAsync(engine, softwareBitmap, scale));
+                    return OcrPostProcessor.MergeLineFragments(await RunAsync(engine, softwareBitmap, scale));
             }
 
             // Auto: run every installed recognizer and keep from each ONLY the blocks
@@ -121,12 +145,12 @@ public sealed class OcrService
             var perEngine = await Task.WhenAll(engines.Select(async engine =>
             {
                 var es = OcrPostProcessor.ScriptOfTag(engine.RecognizerLanguage?.LanguageTag);
-                var blocks = await RunAsync(engine, softwareBitmap, scale);
-                return blocks.Where(b => OcrPostProcessor.IsAppropriate(b.OriginalText, es));
+                var lines = await RunAsync(engine, softwareBitmap, scale);
+                return lines.Where(l => OcrPostProcessor.IsAppropriate(l.Text, es));
             }));
 
-            var all = perEngine.SelectMany(b => b).ToList();
-            return MergeLineFragments(DedupOverlaps(all));
+            var all = perEngine.SelectMany(l => l).ToList();
+            return OcrPostProcessor.MergeLineFragments(OcrPostProcessor.DedupOverlaps(all));
         }
     }
 
@@ -166,11 +190,11 @@ public sealed class OcrService
         catch { return null; }
     }
 
-    private static async Task<List<OcrBlock>> RunAsync(OcrEngine engine, SoftwareBitmap bmp, double scale)
+    private static async Task<List<OcrLine>> RunAsync(OcrEngine engine, SoftwareBitmap bmp, double scale)
     {
         var result = await engine.RecognizeAsync(bmp);
 
-        var blocks = new List<OcrBlock>(result.Lines.Count);
+        var lines = new List<OcrLine>(result.Lines.Count);
         foreach (var line in result.Lines)
         {
             double minX = double.MaxValue, minY = double.MaxValue;
@@ -186,35 +210,13 @@ public sealed class OcrService
             if (minX == double.MaxValue) continue;
 
             // Map back from upscaled image coords to original screenshot pixels.
-            blocks.Add(new OcrBlock
-            {
-                OriginalText = OcrPostProcessor.JoinCjk(line.Text),
-                BoundingRect = new Rect(minX / scale, minY / scale,
-                                        (maxX - minX) / scale, (maxY - minY) / scale),
-                DetectedLanguage = engine.RecognizerLanguage?.LanguageTag,
-            });
+            lines.Add(new OcrLine(
+                OcrPostProcessor.JoinCjk(line.Text),
+                new OcrRect(minX / scale, minY / scale, (maxX - minX) / scale, (maxY - minY) / scale),
+                engine.RecognizerLanguage?.LanguageTag));
         }
-        return blocks;
+        return lines;
     }
-
-    private static List<OcrBlock> MergeLineFragments(List<OcrBlock> blocks) =>
-        FromLines(OcrPostProcessor.MergeLineFragments(ToLines(blocks)));
-
-    private static List<OcrBlock> DedupOverlaps(List<OcrBlock> blocks) =>
-        FromLines(OcrPostProcessor.DedupOverlaps(ToLines(blocks)));
-
-    private static List<OcrLine> ToLines(List<OcrBlock> blocks) =>
-        blocks.Select(b => new OcrLine(b.OriginalText,
-            new OcrRect(b.BoundingRect.X, b.BoundingRect.Y, b.BoundingRect.Width, b.BoundingRect.Height),
-            b.DetectedLanguage)).ToList();
-
-    private static List<OcrBlock> FromLines(List<OcrLine> lines) =>
-        lines.Select(l => new OcrBlock
-        {
-            OriginalText = l.Text,
-            BoundingRect = new Rect(l.Rect.X, l.Rect.Y, l.Rect.Width, l.Rect.Height),
-            DetectedLanguage = l.Language,
-        }).ToList();
 
     /// <summary>
     /// Convert a GDI bitmap into a SoftwareBitmap by copying its pixels once into a

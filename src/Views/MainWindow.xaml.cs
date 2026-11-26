@@ -313,7 +313,8 @@ public partial class MainWindow : Window, IDisposable
             try { escape.Register(HotkeyModifiers.None, Key.Escape); }
             catch (InvalidOperationException) { /* another app holds Esc: no cancel this time */ }
 
-            var blocks = await _ocr.RecognizeAsync(capture.Bitmap, _settings.Current.SourceLanguage);
+            var blocks = await _ocr.RecognizeAsync(
+                capture.Bitmap, _settings.Current.SourceLanguage, _settings.Current.GroupParagraphs);
             cancel.Token.ThrowIfCancellationRequested();
             if (blocks.Count == 0)
             {
