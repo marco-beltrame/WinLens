@@ -11,6 +11,11 @@ All notable changes to this project are documented here. The format is based on
 - Hold <kbd>Space</kbd> on the overlay to see the original text; release it to bring the
   translation back.
 
+### Changed
+- A sentence that wraps over several lines is now translated as one sentence instead of line
+  by line, so it keeps its meaning and reads naturally. The translation is laid back over the
+  same lines. Menus, lists and chat messages are still translated one line at a time (#42).
+
 ## [1.3.0] - 2026-10-14
 
 ### Added
