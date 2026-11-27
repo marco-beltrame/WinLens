@@ -15,7 +15,7 @@ public class LineRoomsTests
     /// <summary>A screen in the making: lines of text on a picture, as the OCR would report them.</summary>
     private sealed class Screen
     {
-        private readonly List<(OcrRect Rect, bool Single)> _lines = new();
+        private readonly List<(OcrRect Rect, double PadY)> _lines = new();
         private readonly double _scale, _offsetX, _offsetY;
 
         public Screen(int width, int height, int colour, double scale = 1, double offsetX = 0, double offsetY = 0)
@@ -37,11 +37,11 @@ public class LineRoomsTests
         }
 
         /// <summary>A single line of text: its ink on the picture, and its box.</summary>
-        public int Line(double x, double y, double width, double height = 16)
+        public int Line(double x, double y, double width, double height = 16, double padY = PadY)
         {
             Paint(x, y, width, height, Ink);
-            _lines.Add((new OcrRect(x, y, width, height), true));
-            Rooms.AddLine(_lines.Count - 1, _lines[^1].Rect);
+            _lines.Add((new OcrRect(x, y, width, height), padY));
+            Rooms.AddLine(_lines.Count - 1, _lines[^1].Rect, PadX, padY);
             return _lines.Count - 1;
         }
 
@@ -49,16 +49,18 @@ public class LineRoomsTests
         public int ParagraphLine(OcrRect line, OcrRect reach)
         {
             Paint(line.X, line.Y, line.Width, line.Height, Ink);
-            _lines.Add((line, false));
-            Rooms.AddParagraphLine(_lines.Count - 1, reach);
+            _lines.Add((line, PadY));
+            Rooms.AddParagraphLine(_lines.Count - 1, reach, PadX, PadY);
             return _lines.Count - 1;
         }
 
-        public LineRoom Room(int line, int colour = White) =>
-            Rooms.Find(Grid, line, _lines[line].Rect, PadX, PadY, colour);
+        public LineSpot Spot(int line, int colour = White) =>
+            new(line, _lines[line].Rect, PadX, _lines[line].PadY, colour);
+
+        public LineRoom Room(int line, int colour = White) => Rooms.Find(Grid, Spot(line, colour));
 
         public LinePlacement Place(int line, string text, int colour = White) =>
-            Rooms.Place(Grid, Room(line, colour), text, Measure, RowHeight, 0.4);
+            Rooms.Place(Grid, Spot(line, colour), text, Measure, RowHeight, 0.4);
     }
 
     private static string Text(int characters) => new('x', characters);
@@ -285,13 +287,16 @@ public class LineRoomsTests
         Assert.Equal(20 + 302, Right(b.Box));
     }
 
-    [Fact]
-    public void OnAScaledScreen_TheRoomIsTheSame()
+    [Theory]
+    [InlineData(1.5, 45, 30)]     // a region of the screen: the picture starts inside the window
+    [InlineData(1.5, -30, -15)]
+    [InlineData(1.25, 10, 5)]
+    [InlineData(2, 0, 0)]
+    public void OnAScaledScreen_TheRoomIsTheSame(double scale, double offsetX, double offsetY)
     {
-        // The card of LongerText_StopsShortOfTheEdgeOfItsCard at 150 %, with the
-        // screenshot starting 30 by 15 pixels inside the window.
+        // The card of LongerText_StopsShortOfTheEdgeOfItsCard on a screen scaled up.
         var plain = new Screen(600, 100, Page).Paint(50, 0, 250, 100, White);
-        var scaled = new Screen(900, 150, Page, scale: 1.5, offsetX: -30, offsetY: -15).Paint(50, 0, 250, 100, White);
+        var scaled = new Screen(1200, 200, Page, scale, offsetX, offsetY).Paint(50, 0, 250, 100, White);
         int a = plain.Line(60, 40, 80), b = scaled.Line(60, 40, 80);
 
         var expected = plain.Place(a, Text(40));
@@ -312,5 +317,89 @@ public class LineRoomsTests
 
         Assert.True(Right(placed.Box) <= 300);
         Assert.True(placed.Box.Y >= 0 && Bottom(placed.Box) <= 60);
+    }
+
+    [Fact]
+    public void TextThatFits_IsPlacedWithoutLookingAtTheScreen()
+    {
+        var screen = new Screen(600, 100, White);
+        int line = screen.Line(100, 40, 80);
+
+        screen.Place(line, Text(6));
+        Assert.Equal(0, screen.Picture.Reads);
+
+        screen.Place(line, Text(20));
+        Assert.True(screen.Picture.Reads > 0);
+    }
+
+    [Fact]
+    public void CellOfATable_DoesNotGrowAcrossTheRuleNextToIt()
+    {
+        // The rule stands two units from the text, inside what the fill covers anyway,
+        // and the cell beyond it is empty.
+        var screen = new Screen(600, 100, White).Paint(102, 0, 1, 100, 0xDDDDDD);
+        int line = screen.Line(20, 40, 80);
+
+        var placed = screen.Place(line, Text(20));
+
+        Assert.Equal(new OcrRect(20, 40, 80, 16), placed.Box);
+        Assert.Equal(0.4, placed.Scale);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void RowOfATable_DoesNotGrowAcrossTheRuleUnderIt(double scale)
+    {
+        // A rule one unit under the text; plenty of room beneath it, none above.
+        var screen = new Screen(600, 300, White, scale).Paint(0, 57, 400, 1, 0xDDDDDD).Paint(0, 0, 400, 36, Page);
+        int line = screen.Line(20, 40, 80);
+        screen.Paint(104, 30, 2, 40, Blue);   // and no room beside it
+
+        var placed = screen.Place(line, "aaaa bbbb cccc dddd eeee ffff gggg hhhh");
+
+        Assert.True(Bottom(placed.Box) <= 56, $"box ends at {Bottom(placed.Box)}");
+        Assert.True(placed.Box.Y >= 40 - 2);
+    }
+
+    [Fact]
+    public void TallerLineJustBelow_KeepsItsFill()
+    {
+        // The small line could run on over the top of the large one's fill, which is
+        // drawn later and would cover the bottom of its text.
+        var screen = new Screen(600, 120, White);
+        int small = screen.Line(20, 40, 60, 8);
+        int large = screen.Line(140, 50, 200, 30, padY: 4);
+
+        var placed = screen.Place(small, Text(30));
+
+        // Half of what lies between them, less the gap: it stops well before the large line.
+        Assert.True(Right(placed.Box) + PadX <= 140 - PadX, $"box ends at {Right(placed.Box)}");
+        Assert.Equal(new OcrRect(140, 50, 200, 30), screen.Place(large, Text(10)).Box);
+    }
+
+    [Fact]
+    public void SameLinePlacedTwiceInAPass_GetsTheSameRoom()
+    {
+        var screen = new Screen(600, 100, White);
+        int line = screen.Line(20, 40, 80);
+
+        var first = screen.Place(line, Text(20));
+        var second = screen.Place(line, Text(20));
+
+        Assert.Equal(new OcrRect(20, 40, 202, 16), first.Box);
+        Assert.Equal(first.Box, second.Box);
+        Assert.Equal(1, second.Scale);
+    }
+
+    [Fact]
+    public void Placement_SaysWhenTheTextIsCentred()
+    {
+        var screen = new Screen(600, 100, Page).Paint(200, 30, 200, 36, Blue);
+        int label = screen.Line(260, 40, 80);
+
+        Assert.True(screen.Place(label, Text(11), Blue).Centred);
+        Assert.False(screen.Place(label, Text(6), Blue).Centred);   // it fits: as it always was
     }
 }

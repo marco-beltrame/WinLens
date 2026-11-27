@@ -17,7 +17,14 @@ internal sealed class Picture : IPixels
 
     public int Width { get; }
     public int Height { get; }
-    public int Rgb(int x, int y) => _rgb[y, x];
+    /// <summary>How many pixels have been read so far.</summary>
+    public int Reads { get; private set; }
+
+    public int Rgb(int x, int y)
+    {
+        Reads++;
+        return _rgb[y, x];
+    }
 
     public Picture Paint(int x, int y, int width, int height, int colour)
     {

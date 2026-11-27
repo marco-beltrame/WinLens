@@ -44,6 +44,23 @@ public class BackdropTests
     }
 
     [Fact]
+    public void Colour_OfTwoTones_IsOneOfThem()
+    {
+        // Half on a card, half on the page beside it: never a colour that is not there.
+        var samples = Enumerable.Repeat(White, 20).Concat(Enumerable.Repeat(0xE0E4EC, 20)).ToArray();
+
+        Assert.Contains(Backdrop.Colour(samples), new[] { White, 0xE0E4EC });
+    }
+
+    [Fact]
+    public void Colour_OfManySamples_IsStillTheCommonest()
+    {
+        var samples = Enumerable.Repeat(Blue, 500).Concat(Enumerable.Range(0, 400)).ToArray();
+
+        Assert.Equal(Blue, Backdrop.Colour(samples));
+    }
+
+    [Fact]
     public void Colour_OfNoSamples_IsBlack()
     {
         Assert.Equal(Black, Backdrop.Colour(ReadOnlySpan<int>.Empty));
@@ -103,6 +120,86 @@ public class BackdropTests
         var picture = new Picture(300, 40, White);
 
         Assert.Equal(new BackdropRun(50, false), Backdrop.Sideways(picture, 100, 1, -5, 60, White, 50));
+    }
+
+    [Fact]
+    public void Sideways_PassesOverTheEndOfTheTextItself()
+    {
+        // The last letter reaches two pixels past its box, within the rows of the text.
+        var picture = new Picture(300, 40, White).Paint(100, 12, 2, 6, Black).Paint(180, 0, 1, 40, Black);
+
+        var run = Backdrop.Sideways(picture, 100, 1, 10, 19, White, 200, lead: 3);
+
+        Assert.Equal(new BackdropRun(80, true), run);
+    }
+
+    [Fact]
+    public void Sideways_StopsAtARuleRightNextToTheText()
+    {
+        // A rule from top to bottom two pixels on, plain background beyond it.
+        var picture = new Picture(300, 40, White).Paint(102, 0, 1, 40, 0xDDDDDD);
+
+        var run = Backdrop.Sideways(picture, 100, 1, 10, 19, White, 200, lead: 3);
+
+        Assert.Equal(new BackdropRun(2, true), run);
+    }
+
+    [Fact]
+    public void Sideways_StopsAtARuleThatTouchesTheText()
+    {
+        var picture = new Picture(300, 40, White).Paint(100, 0, 1, 40, 0xDDDDDD);
+
+        Assert.Equal(new BackdropRun(0, true), Backdrop.Sideways(picture, 100, 1, 10, 19, White, 200, lead: 3));
+    }
+
+    [Fact]
+    public void Sideways_PassesOverNothing_OnceTheBackgroundHasBegun()
+    {
+        // The end of a letter, a clear column, then something else: still within the lead.
+        var picture = new Picture(300, 40, White).Paint(100, 12, 1, 6, Black).Paint(102, 12, 1, 6, Black);
+
+        var run = Backdrop.Sideways(picture, 100, 1, 10, 19, White, 200, lead: 4);
+
+        Assert.Equal(new BackdropRun(2, true), run);
+    }
+
+    [Fact]
+    public void Sideways_TellsTextFromARule_OnlyWhereTheBandHasItsMargin()
+    {
+        // The band starts above the picture: its first row there is a row of the text.
+        var picture = new Picture(300, 40, White).Paint(100, 0, 2, 6, Black);
+
+        var run = Backdrop.Sideways(picture, 100, 1, -2, 7, White, 50, lead: 3);
+
+        Assert.Equal(new BackdropRun(50, false), run);
+    }
+
+    [Fact]
+    public void UpOrDown_PassesOverTheFootOfALetter_AndAnUnderline()
+    {
+        // Under the text only, not as far as the columns of the fill on either side.
+        var picture = new Picture(300, 100, White).Paint(120, 50, 4, 2, Black).Paint(110, 52, 80, 1, Black);
+
+        var run = Backdrop.UpOrDown(picture, 50, 1, 100, 199, White, 30, lead: 3);
+
+        Assert.Equal(new BackdropRun(30, false), run);
+    }
+
+    [Fact]
+    public void UpOrDown_StopsAtARuleRightUnderTheText()
+    {
+        var picture = new Picture(300, 100, White).Paint(0, 51, 300, 1, 0xDDDDDD);
+
+        Assert.Equal(new BackdropRun(1, true), Backdrop.UpOrDown(picture, 50, 1, 100, 199, White, 30, lead: 3));
+        Assert.Equal(new BackdropRun(1, true), Backdrop.UpOrDown(picture, 52, -1, 100, 199, White, 30, lead: 3));
+    }
+
+    [Fact]
+    public void UpOrDown_StopsAtARuleThatTouchesTheText()
+    {
+        var picture = new Picture(300, 100, White).Paint(0, 50, 300, 1, 0xDDDDDD);
+
+        Assert.Equal(new BackdropRun(0, true), Backdrop.UpOrDown(picture, 50, 1, 100, 199, White, 30, lead: 3));
     }
 
     [Fact]

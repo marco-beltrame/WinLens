@@ -128,19 +128,24 @@ public static class ParagraphLayout
 
         minScale = Math.Clamp(minScale, 0.01, 1);
         double best = Math.Max(minScale, width / whole);
+        // What more rows have to reach. A single row too wide even at the smallest scale
+        // is cut off, and any rows that show all of the text are better than that.
+        double atLeast = width / whole < minScale ? minScale : best * RowGain;
         for (int m = 2; m <= maxRows; m++)
         {
             double byHeight = height / (m * rowHeight);
-            if (byHeight < best * RowGain) break;   // and more rows would be smaller still
+            if (byHeight < atLeast) break;   // and more rows would be smaller still
 
             var widths = Enumerable.Repeat(width, m).ToArray();
             var fit = Flow(text, widths, widths, measure, minScale);
             if (fit.Lines.Any(l => l.Length == 0)) break;   // nothing left to put on them
 
+            // Flow gives its rows back even when they are too wide at the smallest scale.
             double scale = Math.Min(Math.Min(1, byHeight), fit.Scale);
-            if (scale >= best * RowGain)
+            if (scale >= atLeast && fit.Lines.All(l => measure(l) * scale <= width + 1e-9))
             {
                 best = scale;
+                atLeast = scale * RowGain;
                 rows = fit.Lines;
             }
         }
@@ -148,37 +153,46 @@ public static class ParagraphLayout
     }
 
     /// <summary>
-    /// Takes the row breaks of <see cref="Rows"/> out of a piece of text again: a space
-    /// where two words met, nothing between characters of a script written without spaces.
+    /// The rows of <see cref="Rows"/> as one text, a line break after each. A space the
+    /// text had where a row now ends stays at the end of that row, where it does not show:
+    /// <see cref="Unwrap"/> can then give the text back as it was, whatever the script.
     /// </summary>
+    public static string Wrap(string text, IReadOnlyList<string> rows)
+    {
+        if (rows.Count < 2) return rows.Count == 1 ? rows[0] : text;
+
+        var tokens = Tokenize(text);
+        var sb = new StringBuilder(text.Length + 2 * rows.Count);
+        int i = 0;
+        for (int k = 0; k < rows.Count; k++)
+        {
+            if (k > 0)
+            {
+                // Rows that are not this text's: a space is the better guess.
+                if (i >= tokens.Count || tokens[i].SpaceBefore) sb.Append(' ');
+                sb.Append('\n');
+            }
+            sb.Append(rows[k]);
+
+            // Past the pieces this row is made of.
+            int length = 0;
+            for (int first = i; i < tokens.Count && length < rows[k].Length; i++)
+                length += tokens[i].Text.Length + (i > first && tokens[i].SpaceBefore ? 1 : 0);
+            if (length != rows[k].Length) i = tokens.Count;
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Takes the row breaks of <see cref="Wrap"/> out of a piece of text again.</summary>
     public static string Unwrap(string rows)
     {
         if (!rows.Contains('\n')) return rows;
 
         var sb = new StringBuilder(rows.Length);
-        for (int i = 0; i < rows.Length; i++)
-        {
-            char c = rows[i];
-            if (c == '\r') continue;
-            if (c != '\n')
-            {
-                sb.Append(c);
-                continue;
-            }
-
-            bool apart = sb.Length > 0 && i + 1 < rows.Length
-                && !(WrittenWithoutSpaces(sb[^1]) && WrittenWithoutSpaces(rows[i + 1]));
-            if (apart && sb[^1] != ' ') sb.Append(' ');
-        }
+        foreach (char c in rows)
+            if (c is not ('\r' or '\n')) sb.Append(c);
         return sb.ToString();
     }
-
-    private static bool WrittenWithoutSpaces(char c) =>
-        char.IsSurrogate(c)                        // ideographs beyond the basic plane
-        || IsBreakable(new Rune(c))
-        || c is >= '\u0E00' and <= '\u0EFF'      // Thai, Lao
-           or >= '\u1000' and <= '\u109F'        // Myanmar
-           or >= '\u1780' and <= '\u17FF';       // Khmer
 
     /// <summary>
     /// The rows a translated paragraph is drawn in: the original lines made equally tall

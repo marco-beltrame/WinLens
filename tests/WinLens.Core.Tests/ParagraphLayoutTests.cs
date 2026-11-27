@@ -361,16 +361,61 @@ public class ParagraphLayoutTests
         Assert.DoesNotContain(fit.Lines, l => l.StartsWith('，') || l.StartsWith('！'));
     }
 
-    [Theory]
-    [InlineData("the network is\nworking", "the network is working")]
-    [InlineData("the network is \r\nworking", "the network is working")]
-    [InlineData("网络已经\n连上了", "网络已经连上了")]
-    [InlineData("连上了。\nThank you", "连上了。 Thank you")]
-    [InlineData("สวัสดี\nครับ", "สวัสดีครับ")]
-    [InlineData("one row", "one row")]
-    [InlineData("three\nshort\nrows", "three short rows")]
-    public void Unwrap_PutsTheTextBackOnOneLine(string rows, string expected)
+    [Fact]
+    public void Rows_ThatShowAllOfTheText_BeatARowThatIsCutOff()
     {
-        Assert.Equal(expected, ParagraphLayout.Unwrap(rows));
+        // 470 wide where there is 100: one row would be cut off even at the smallest scale.
+        var fit = Rows("aaaaaaaaaaa bbbbbbbbbbb ccccccccccc ddddddddddd", 100, 20);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.InRange(fit.Scale, 0.4, 0.5);
+        Assert.All(fit.Lines, l => Assert.True(Measure(l) * fit.Scale <= 100));
     }
+
+    [Fact]
+    public void Rows_ThatAreCutOffThemselves_AreNotTaken()
+    {
+        // The long word is too wide for a row whatever comes after it.
+        var fit = Rows("Donaudampfschifffahrtsgesellschaftskapitaen ja", 100, 60);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.4, fit.Scale);
+    }
+
+    [Theory]
+    [InlineData("the network is working thank you so much!!", 260)]
+    [InlineData("请打开设置然后选择WinLens再试一次", 120)]              // no space where the scripts meet
+    [InlineData("中文 中文 中文 中文 中文 中文", 90)]                    // Chinese with spaces of its own
+    [InlineData("สวัสดี ครับ ขอบคุณ มาก ครับ", 120)]
+    [InlineData("连上了。 Thank you so much", 110)]
+    public void Wrap_ThenUnwrap_GivesTheTextBack(string text, double width)
+    {
+        var fit = Rows(text, width, 60);
+        Assert.True(fit.Lines.Count > 1);
+
+        string wrapped = ParagraphLayout.Wrap(text, fit.Lines);
+
+        Assert.Equal(fit.Lines.Count - 1, wrapped.Count(c => c == '\n'));
+        Assert.Equal(fit.Lines, wrapped.Split('\n').Select(row => row.TrimEnd(' ')));
+        Assert.Equal(text, ParagraphLayout.Unwrap(wrapped));
+    }
+
+    [Fact]
+    public void Unwrap_OfPartOfTheRows_IsThatPartOfTheText()
+    {
+        string text = "the network is working thank you so much!!";
+        string wrapped = ParagraphLayout.Wrap(text, Rows(text, 260, 44).Lines);
+        int from = wrapped.IndexOf("working", StringComparison.Ordinal);
+        int to = wrapped.IndexOf("you", StringComparison.Ordinal) + 3;
+
+        // As selected across the row break, with the line break Windows text boxes use.
+        string selected = wrapped[from..to].Replace("\n", "\r\n");
+
+        Assert.Contains('\n', selected);
+        Assert.Equal("working thank you", ParagraphLayout.Unwrap(selected));
+    }
+
+    [Fact]
+    public void Wrap_OfASingleRow_IsThatRow() =>
+        Assert.Equal("one row", ParagraphLayout.Wrap("one row", new[] { "one row" }));
 }

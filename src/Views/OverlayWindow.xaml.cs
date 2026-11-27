@@ -275,7 +275,7 @@ public partial class OverlayWindow : Window
     /// with how wide the text of each may become.
     /// </summary>
     private sealed record BlockBoxes(
-        LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities, LineRoom? Room = null);
+        LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities, LineSpot? Spot = null);
 
     private void BuildOverlayBoxes()
     {
@@ -302,7 +302,7 @@ public partial class OverlayWindow : Window
             var slots = slotsOf[i];
             if (slots.Length == 1)
             {
-                _rooms.AddLine(i, ToOcrRect(slots[0]));
+                _rooms.AddLine(i, ToOcrRect(slots[0]), PadX(slots[0]), PadY(slots[0]));
                 continue;
             }
 
@@ -311,7 +311,8 @@ public partial class OverlayWindow : Window
                 slots.Select(ToOcrRect).ToArray(), others, slots.Min(r => r.Height) * 0.5);
             for (int k = 0; k < slots.Length; k++)
                 _rooms.AddParagraphLine(i, new OcrRect(
-                    reach[k].Left, slots[k].Top, Math.Max(0, reach[k].Right - reach[k].Left), slots[k].Height));
+                    reach[k].Left, slots[k].Top, Math.Max(0, reach[k].Right - reach[k].Left), slots[k].Height),
+                    PadX(slots[k]), PadY(slots[k]));
         }
 
         for (int i = 0; i < _blocks.Count; i++)
@@ -336,13 +337,14 @@ public partial class OverlayWindow : Window
             var capacities = slots.Length > 1
                 ? Capacities(slots, block.Alignment, reachOf[i])
                 : Array.Empty<double>();
-            // Text written right to left grows the other way; it keeps the box it has.
-            var room = slots.Length == 1 && !IsRightToLeft(block.OriginalText)
-                ? _rooms.Find(grid, i, ToOcrRect(slots[0]), PadX(slots[0]), PadY(slots[0]), colour)
+            // A single line may take more room than its box when its translation needs it.
+            // Not text written right to left, which grows the other way: it keeps its box.
+            var spot = slots.Length == 1 && !IsRightToLeft(block.OriginalText)
+                ? new LineSpot(i, ToOcrRect(slots[0]), PadX(slots[0]), PadY(slots[0]), colour)
                 : null;
 
             var boxes = new BlockBoxes(lines, block.Alignment,
-                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities, room);
+                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities, spot);
             _boxes[block] = boxes;
             ApplyText(boxes, block.TranslatedText ?? "", grid);
         }
@@ -501,15 +503,16 @@ public partial class OverlayWindow : Window
         var box = ToOcrRect(slot);
         string shown = text;
         double size;
-        if (boxes.Room is { } room)
+        bool centred = false;
+        if (boxes.Spot is { } spot)
         {
-            var place = _rooms.Place(grid, room, text, s => MeasureWidth(s, boxes.FontSize),
+            var place = _rooms.Place(grid, spot, text, s => MeasureWidth(s, boxes.FontSize),
                 boxes.FontSize * OverlayFont.LineSpacing, MinFontSize / boxes.FontSize, MaxRows);
             box = place.Box;
 
             if (place.Rows.Count > 1)
             {
-                shown = string.Join("\n", place.Rows);
+                shown = ParagraphLayout.Wrap(text, place.Rows);
                 size = Math.Max(MinFontSize, boxes.FontSize * place.Scale);
             }
             else if (box.Width > slot.Width && place.Scale >= 1)
@@ -520,6 +523,12 @@ public partial class OverlayWindow : Window
             {
                 size = FitFontSize(text, box.Width, slot.Height);
             }
+
+            // The label of a button whose box grew on both sides stays in the middle of
+            // it. Only a single row that shows whole: rows start under each other, as
+            // wrapped text does, and text that is cut off is cut off at its end.
+            centred = place.Centred && place.Rows.Count == 1 && box.Width > slot.Width
+                && MeasureWidth(text, size) <= box.Width;
         }
         else
         {
@@ -530,9 +539,7 @@ public partial class OverlayWindow : Window
         tb.FontSize = size;
         tb.Width = box.Width;
         tb.Height = box.Height;
-        // Rows start under each other, as wrapped text does; the block they form is what
-        // stays in the middle.
-        tb.TextAlignment = boxes.Room is { Centred: true } && shown == text ? TextAlignment.Center : TextAlignment.Left;
+        tb.TextAlignment = centred ? TextAlignment.Center : TextAlignment.Left;
         border.Width = box.Width + padX * 2;
         border.Height = box.Height + padY * 2;
         Canvas.SetLeft(border, box.X - padX);

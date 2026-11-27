@@ -116,11 +116,34 @@ public static class Backdrop
     /// rows <paramref name="top"/> and <paramref name="bottom"/> must have the colour.
     /// </summary>
     /// <param name="limit">How many columns to look at, at most.</param>
-    public static BackdropRun Sideways(IPixels pixels, int x, int step, int top, int bottom, int colour, int limit)
+    /// <param name="lead">
+    /// How many of the first columns may still hold the end of the text itself (the box of
+    /// a line can cut its last letter short). Such columns are passed over, up to the first
+    /// clear one, and count as background. Not when what is in them reaches the top or the
+    /// bottom row, the margin text leaves free: that is a rule or an edge, and it ends the
+    /// run like anything further on does.
+    /// </param>
+    public static BackdropRun Sideways(
+        IPixels pixels, int x, int step, int top, int bottom, int colour, int limit, int lead = 0)
     {
+        // A band the picture cuts off has no margin on that side to tell text by.
+        bool marginAbove = top >= 0, marginBelow = bottom < pixels.Height;
         top = Math.Max(0, top);
         bottom = Math.Min(pixels.Height - 1, bottom);
         if (top > bottom) return new BackdropRun(0, true);
+
+        int passed = 0;
+        for (; passed < lead && passed < limit; passed++)
+        {
+            int cx = x + passed * step;
+            if (cx < 0 || cx >= pixels.Width) return new BackdropRun(passed, true);
+            if (ColumnIsClear(pixels, cx, top, bottom, colour)) break;
+            if (marginAbove && !Same(pixels.Rgb(cx, top), colour) ||
+                marginBelow && !Same(pixels.Rgb(cx, bottom), colour))
+                return new BackdropRun(passed, true);
+        }
+        x += passed * step;
+        limit -= passed;
 
         // The middle row first: it finds most obstacles and spares reading whole columns
         // beyond them.
@@ -139,12 +162,10 @@ public static class Backdrop
         int length = 0;
         for (int cx = x; length < reach; cx += step, length++)
         {
-            bool clear = true;
-            for (int y = top; y <= bottom && clear; y++)
-                clear = Same(pixels.Rgb(cx, y), colour);
-            if (!clear) return new BackdropRun(length, true);
+            if (!ColumnIsClear(pixels, cx, top, bottom, colour))
+                return new BackdropRun(passed + length, true);
         }
-        return new BackdropRun(length, ended);
+        return new BackdropRun(passed + length, ended);
     }
 
     /// <summary>
@@ -153,20 +174,51 @@ public static class Backdrop
     /// <paramref name="left"/> and <paramref name="right"/> must have the colour.
     /// </summary>
     /// <param name="limit">How many rows to look at, at most.</param>
-    public static BackdropRun UpOrDown(IPixels pixels, int y, int step, int left, int right, int colour, int limit)
+    /// <param name="lead">
+    /// How many of the first rows may still hold something of the text itself (the foot of
+    /// a letter its box cut short, its underline): see <see cref="Sideways"/>. Here it is
+    /// what reaches the first or the last column that ends the run.
+    /// </param>
+    public static BackdropRun UpOrDown(
+        IPixels pixels, int y, int step, int left, int right, int colour, int limit, int lead = 0)
     {
+        bool marginLeft = left >= 0, marginRight = right < pixels.Width;
         left = Math.Max(0, left);
         right = Math.Min(pixels.Width - 1, right);
         if (left > right) return new BackdropRun(0, true);
 
-        int length = 0;
-        for (int cy = y; length < limit; cy += step, length++)
+        int passed = 0;
+        for (; passed < lead && passed < limit; passed++)
         {
-            if (cy < 0 || cy >= pixels.Height) return new BackdropRun(length, true);
-            for (int cx = left; cx <= right; cx++)
-                if (!Same(pixels.Rgb(cx, cy), colour)) return new BackdropRun(length, true);
+            int cy = y + passed * step;
+            if (cy < 0 || cy >= pixels.Height) return new BackdropRun(passed, true);
+            if (RowIsClear(pixels, cy, left, right, colour)) break;
+            if (marginLeft && !Same(pixels.Rgb(left, cy), colour) ||
+                marginRight && !Same(pixels.Rgb(right, cy), colour))
+                return new BackdropRun(passed, true);
+        }
+
+        int length = passed;
+        for (int cy = y + passed * step; length < limit; cy += step, length++)
+        {
+            if (cy < 0 || cy >= pixels.Height || !RowIsClear(pixels, cy, left, right, colour))
+                return new BackdropRun(length, true);
         }
         return new BackdropRun(length, false);
+    }
+
+    private static bool ColumnIsClear(IPixels pixels, int x, int top, int bottom, int colour)
+    {
+        for (int y = top; y <= bottom; y++)
+            if (!Same(pixels.Rgb(x, y), colour)) return false;
+        return true;
+    }
+
+    private static bool RowIsClear(IPixels pixels, int y, int left, int right, int colour)
+    {
+        for (int x = left; x <= right; x++)
+            if (!Same(pixels.Rgb(x, y), colour)) return false;
+        return true;
     }
 
     /// <summary>
