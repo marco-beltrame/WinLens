@@ -540,6 +540,7 @@ public partial class OverlayWindow : Window
         tb.Width = box.Width;
         tb.Height = box.Height;
         tb.TextAlignment = centred ? TextAlignment.Center : TextAlignment.Left;
+        LetTextBreathe(tb, box.Height, rows: shown.Count(c => c == '\n') + 1);
         border.Width = box.Width + padX * 2;
         border.Height = box.Height + padY * 2;
         Canvas.SetLeft(border, box.X - padX);
@@ -605,7 +606,22 @@ public partial class OverlayWindow : Window
             double padX = border.Padding.Left;
             border.Width = tb.Width + padX * 2;
             Canvas.SetLeft(border, x0 - padX);
+            LetTextBreathe(tb, slot.Height, rows: 1);
         }
+    }
+
+    /// <summary>
+    /// The text box is as tall as the OCR line, but a line of text at the chosen font can
+    /// be a little taller (small lines at 125/150 % keep an 8 DIP font). The box then grows
+    /// evenly into the fill's margin, so the bottoms of g, p and y are not cut off; the
+    /// text stays where it was.
+    /// </summary>
+    private static void LetTextBreathe(TextBox tb, double height, int rows)
+    {
+        double need = rows * tb.FontSize * OverlayFont.LineSpacing;
+        double extra = Math.Max(0, need - height) / 2;
+        tb.Height = height + 2 * extra;
+        tb.Margin = new Thickness(0, -extra, 0, -extra);
     }
 
     /// <summary>The largest font size, from <paramref name="startSize"/> down, at which the text fits the width.</summary>
