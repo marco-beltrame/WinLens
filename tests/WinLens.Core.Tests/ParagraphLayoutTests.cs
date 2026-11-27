@@ -265,4 +265,157 @@ public class ParagraphLayoutTests
 
         Assert.Equal((168.0, 400.0), reach[1]);
     }
+
+    // ---- a single line that needs more room -------------------------------------
+
+    // Rows 20 high at full size.
+    private static ParagraphFit Rows(string text, double width, double height, double minScale = 0.4) =>
+        ParagraphLayout.Rows(text, width, height, 20, Measure, minScale);
+
+    [Fact]
+    public void Rows_TextThatFits_StaysOnOneRow()
+    {
+        var fit = Rows("see you on Saturday", 200, 60);
+
+        Assert.Equal(new[] { "see you on Saturday" }, fit.Lines);
+        Assert.Equal(1, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_TextTooWide_GoesOnTwoRowsAtFullSize_WhenThereIsHeight()
+    {
+        // 420 wide, in a bubble 260 wide with room for two rows.
+        var fit = Rows("the network is working thank you so much!!", 260, 44);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal(1, fit.Scale);
+        Assert.Equal("the network is working thank you so much!!", string.Join(' ', fit.Lines));
+        Assert.All(fit.Lines, l => Assert.True(Measure(l) <= 260));
+        // Two rows of about the same length, not a full one and a leftover word.
+        Assert.True(Math.Abs(Measure(fit.Lines[0]) - Measure(fit.Lines[1])) <= 60);
+    }
+
+    [Fact]
+    public void Rows_WithoutHeight_ShrinksOnOneRow()
+    {
+        var fit = Rows("the network is working thank you so much!!", 260, 20);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(260.0 / 420, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_AreNotAdded_ForASlightlyLargerFont()
+    {
+        // One row needs 0.9; two rows fit only at 0.95 for lack of height. Not worth it.
+        var fit = Rows("aaaaa bbbbb ccccc ddddd", 207, 38);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.9, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_UseAThird_WhenTwoStillShrinkTheText()
+    {
+        // 590 wide, rows of 200: two rows hold it at about 0.66, three at full size.
+        var fit = Rows("aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll", 200, 60);
+
+        Assert.Equal(3, fit.Lines.Count);
+        Assert.Equal(1, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_WithLittleHeight_AreSmaller_ButLargerThanOneRow()
+    {
+        // Height for two rows only at 0.8; one row would need 0.5.
+        var fit = Rows("aaaa bbbb cccc dddd eeee ffff gggg hhhh", 195, 32);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal(0.8, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_OneLongWord_CannotBeSplit()
+    {
+        var fit = Rows("Donaudampfschifffahrtsgesellschaft", 170, 60);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.5, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_NeverGoBelowTheSmallestScale()
+    {
+        var fit = Rows("Donaudampfschifffahrtsgesellschaft", 34, 20, minScale: 0.4);
+
+        Assert.Equal(0.4, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_ChineseBreaksBetweenCharacters()
+    {
+        var fit = Rows("网络已经连上了，太谢谢你了！", 80, 44);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal("网络已经连上了，太谢谢你了！", string.Concat(fit.Lines));
+        Assert.DoesNotContain(fit.Lines, l => l.StartsWith('，') || l.StartsWith('！'));
+    }
+
+    [Fact]
+    public void Rows_ThatShowAllOfTheText_BeatARowThatIsCutOff()
+    {
+        // 470 wide where there is 100: one row would be cut off even at the smallest scale.
+        var fit = Rows("aaaaaaaaaaa bbbbbbbbbbb ccccccccccc ddddddddddd", 100, 20);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.InRange(fit.Scale, 0.4, 0.5);
+        Assert.All(fit.Lines, l => Assert.True(Measure(l) * fit.Scale <= 100));
+    }
+
+    [Fact]
+    public void Rows_ThatAreCutOffThemselves_AreNotTaken()
+    {
+        // The long word is too wide for a row whatever comes after it.
+        var fit = Rows("Donaudampfschifffahrtsgesellschaftskapitaen ja", 100, 60);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.4, fit.Scale);
+    }
+
+    [Theory]
+    [InlineData("the network is working thank you so much!!", 260)]
+    [InlineData("请打开设置然后选择WinLens再试一次", 120)]              // no space where the scripts meet
+    [InlineData("中文 中文 中文 中文 中文 中文", 90)]                    // Chinese with spaces of its own
+    [InlineData("สวัสดี ครับ ขอบคุณ มาก ครับ", 120)]
+    [InlineData("连上了。 Thank you so much", 110)]
+    public void Wrap_ThenUnwrap_GivesTheTextBack(string text, double width)
+    {
+        var fit = Rows(text, width, 60);
+        Assert.True(fit.Lines.Count > 1);
+
+        string wrapped = ParagraphLayout.Wrap(text, fit.Lines);
+
+        Assert.Equal(fit.Lines.Count - 1, wrapped.Count(c => c == '\n'));
+        Assert.Equal(fit.Lines, wrapped.Split('\n').Select(row => row.TrimEnd(' ')));
+        Assert.Equal(text, ParagraphLayout.Unwrap(wrapped));
+    }
+
+    [Fact]
+    public void Unwrap_OfPartOfTheRows_IsThatPartOfTheText()
+    {
+        string text = "the network is working thank you so much!!";
+        string wrapped = ParagraphLayout.Wrap(text, Rows(text, 260, 44).Lines);
+        int from = wrapped.IndexOf("working", StringComparison.Ordinal);
+        int to = wrapped.IndexOf("you", StringComparison.Ordinal) + 3;
+
+        // As selected across the row break, with the line break Windows text boxes use.
+        string selected = wrapped[from..to].Replace("\n", "\r\n");
+
+        Assert.Contains('\n', selected);
+        Assert.Equal("working thank you", ParagraphLayout.Unwrap(selected));
+    }
+
+    [Fact]
+    public void Wrap_OfASingleRow_IsThatRow() =>
+        Assert.Equal("one row", ParagraphLayout.Wrap("one row", new[] { "one row" }));
 }

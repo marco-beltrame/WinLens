@@ -46,12 +46,18 @@ public partial class OverlayWindow : Window
     private readonly Dictionary<OcrBlock, BlockBoxes> _boxes = new();
     // Text widths at ReferenceFontSize, so a word is only measured once per overlay.
     private readonly Dictionary<string, double> _measured = new(StringComparer.Ordinal);
+    // Where a single line may put a translation longer than itself.
+    private readonly LineRooms _rooms = new();
+    // Scratch space for the colour samples of one line.
+    private readonly int[] _samples = new int[512];
 
     private static readonly FontFamily OverlayFont = new("Segoe UI");
     private static readonly Typeface OverlayTypeface =
         new(OverlayFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     private const double ReferenceFontSize = 32;
     private const double MinFontSize = 7;
+    // The most rows the translation of a single line is set on.
+    private const int MaxRows = 3;
     // Share of a line's ink height the font size may take before descenders are cut off.
     private const double FontPerLineHeight = 0.78;
 
@@ -246,14 +252,20 @@ public partial class OverlayWindow : Window
             target, ct);
         // Results arrive on the UI thread; drop them once a newer request has started.
         ct.ThrowIfCancellationRequested();
+        _rooms.NewPass();
+        using var pixels = new PixelReader(_screenshot);
+        var grid = ScreenshotGrid(pixels);
         for (int i = 0; i < _blocks.Count; i++)
         {
             var b = _blocks[i];
             b.TranslatedText = translated[i];
             if (_boxes.TryGetValue(b, out var boxes))
-                ApplyText(boxes, translated[i]);
+                ApplyText(boxes, translated[i], grid);
         }
     }
+
+    /// <summary>The screenshot under the window's coordinates.</summary>
+    private PixelGrid ScreenshotGrid(PixelReader pixels) => new(pixels, 1 / _pixelToDip, OffsetX, OffsetY);
 
     /// <summary>One line of a block on screen: the fill that hides the original and the text over it.</summary>
     private sealed record LineBox(Border Border, TextBox Text, Rect Slot);
@@ -262,24 +274,46 @@ public partial class OverlayWindow : Window
     /// The boxes of one block. A single line has one; a paragraph one per original line,
     /// with how wide the text of each may become.
     /// </summary>
-    private sealed record BlockBoxes(LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities);
+    private sealed record BlockBoxes(
+        LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities, LineSpot? Spot = null);
 
     private void BuildOverlayBoxes()
     {
         OverlayCanvas.Children.Clear();
         _boxes.Clear();
+        _rooms.Clear();
 
         // Lock the screenshot once for the whole pass. Sampling used to go through
         // Bitmap.GetPixel, which locks and validates per call — around 200 calls per
         // block, on the UI thread, was a visible stall before the overlay faded in.
         using var pixels = new PixelReader(_screenshot);
+        var grid = ScreenshotGrid(pixels);
 
         // Where every line goes, before any is drawn: a paragraph has to know what else
-        // sits on its rows.
+        // sits on its rows, and a single line what it must not grow into.
         var lineRectsOf = _blocks
             .Select(b => b.LineRects.Count > 0 ? b.LineRects : new[] { b.BoundingRect })
             .ToArray();
         var slotsOf = lineRectsOf.Select(Slots).ToArray();
+
+        var reachOf = new (double Left, double Right)[_blocks.Count][];
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            var slots = slotsOf[i];
+            if (slots.Length == 1)
+            {
+                _rooms.AddLine(i, ToOcrRect(slots[0]), PadX(slots[0]), PadY(slots[0]));
+                continue;
+            }
+
+            var others = slotsOf.Where((_, j) => j != i).SelectMany(o => o).Select(ToOcrRect);
+            var reach = reachOf[i] = ParagraphLayout.Reach(
+                slots.Select(ToOcrRect).ToArray(), others, slots.Min(r => r.Height) * 0.5);
+            for (int k = 0; k < slots.Length; k++)
+                _rooms.AddParagraphLine(i, new OcrRect(
+                    reach[k].Left, slots[k].Top, Math.Max(0, reach[k].Right - reach[k].Left), slots[k].Height),
+                    PadX(slots[k]), PadY(slots[k]));
+        }
 
         for (int i = 0; i < _blocks.Count; i++)
         {
@@ -289,27 +323,30 @@ public partial class OverlayWindow : Window
             var menu = BuildContextMenu(block);
 
             var lines = new LineBox[slots.Length];
+            int colour = 0;
             for (int k = 0; k < lines.Length; k++)
             {
                 var (bg, fg) = SampleColors(pixels, lineRects[k]);
+                colour = (bg.R << 16) | (bg.G << 8) | bg.B;
                 // The fill of a paragraph's line stops where the line above ends: it is
                 // drawn later, and would cover the bottom of that line's text.
                 double roomAbove = k > 0 ? slots[k].Top - slots[k - 1].Bottom : double.MaxValue;
                 lines[k] = AddLineBox(slots[k], bg, fg, menu, roomAbove);
             }
 
-            double[] capacities = Array.Empty<double>();
-            if (slots.Length > 1)
-            {
-                var others = slotsOf.Where((_, j) => j != i).SelectMany(o => o).Select(ToOcrRect);
-                capacities = Capacities(slots, block.Alignment,
-                    ParagraphLayout.Reach(slots.Select(ToOcrRect).ToArray(), others, slots.Min(r => r.Height) * 0.5));
-            }
+            var capacities = slots.Length > 1
+                ? Capacities(slots, block.Alignment, reachOf[i])
+                : Array.Empty<double>();
+            // A single line may take more room than its box when its translation needs it.
+            // Not text written right to left, which grows the other way: it keeps its box.
+            var spot = slots.Length == 1 && !IsRightToLeft(block.OriginalText)
+                ? new LineSpot(i, ToOcrRect(slots[0]), PadX(slots[0]), PadY(slots[0]), colour)
+                : null;
 
             var boxes = new BlockBoxes(lines, block.Alignment,
-                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities);
+                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities, spot);
             _boxes[block] = boxes;
-            ApplyText(boxes, block.TranslatedText ?? "");
+            ApplyText(boxes, block.TranslatedText ?? "", grid);
         }
     }
 
@@ -363,12 +400,14 @@ public partial class OverlayWindow : Window
         } - 2).ToArray();
     }
 
+    // How far the fill of a line goes past its text, so that the original characters
+    // underneath are fully covered (kills leftover edges like a stray "I").
+    private static double PadX(Rect slot) => Math.Max(2.0, slot.Height * 0.18);
+    private static double PadY(Rect slot) => Math.Max(1.0, slot.Height * 0.10);
+
     private LineBox AddLineBox(Rect slot, Color bg, Color fg, ContextMenu menu, double roomAbove = double.MaxValue)
     {
-        // Grow the filled background past the text so the original characters
-        // underneath are fully covered (kills leftover edges like a stray "I").
-        double padX = Math.Max(2.0, slot.Height * 0.18);
-        double padY = Math.Max(1.0, slot.Height * 0.10);
+        double padX = PadX(slot), padY = PadY(slot);
         double padTop = Math.Max(0, Math.Min(padY, roomAbove));
 
         var border = new Border
@@ -408,6 +447,7 @@ public partial class OverlayWindow : Window
             Height = slot.Height,
         };
         border.Child = textBox;
+        DataObject.AddCopyingHandler(textBox, OnCopying);
 
         // Stop bare-canvas click-to-close from firing for clicks on a box.
         border.MouseLeftButtonDown += (_, ev) => ev.Handled = true;
@@ -420,20 +460,91 @@ public partial class OverlayWindow : Window
     }
 
     /// <summary>
-    /// Shows <paramref name="text"/> in a block's boxes. A single line shrinks the font
-    /// until the text fits its box; a paragraph is poured over its lines again.
+    /// A translation set on several rows has line breaks of ours in it. A copy of a
+    /// selection across them gets the text as it was translated.
     /// </summary>
-    private void ApplyText(BlockBoxes boxes, string text)
+    private static void OnCopying(object sender, DataObjectCopyingEventArgs e)
+    {
+        if (sender is not TextBox tb || !tb.SelectedText.Contains('\n')) return;
+        e.CancelCommand();
+        try { Clipboard.SetText(ParagraphLayout.Unwrap(tb.SelectedText)); } catch { /* clipboard busy */ }
+    }
+
+    private static bool IsRightToLeft(string text)
+    {
+        foreach (char c in text)
+            if (c is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF')
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Shows <paramref name="text"/> in a block's boxes. A paragraph is poured over its
+    /// lines again; a single line takes what room it has.
+    /// </summary>
+    private void ApplyText(BlockBoxes boxes, string text, PixelGrid grid)
     {
         if (boxes.Lines.Length > 1)
-        {
             ApplyParagraph(boxes, text);
-            return;
+        else
+            ApplyLine(boxes, text, grid);
+    }
+
+    /// <summary>
+    /// Shows the translation of a single line. One longer than the original first takes
+    /// the free room beside the line, then goes onto two or three rows where there is
+    /// room above or below, and only after that gets a smaller font.
+    /// </summary>
+    private void ApplyLine(BlockBoxes boxes, string text, PixelGrid grid)
+    {
+        var (border, tb, slot) = boxes.Lines[0];
+        double padX = border.Padding.Left, padY = border.Padding.Bottom;
+
+        var box = ToOcrRect(slot);
+        string shown = text;
+        double size;
+        bool centred = false;
+        if (boxes.Spot is { } spot)
+        {
+            var place = _rooms.Place(grid, spot, text, s => MeasureWidth(s, boxes.FontSize),
+                boxes.FontSize * OverlayFont.LineSpacing, MinFontSize / boxes.FontSize, MaxRows);
+            box = place.Box;
+
+            if (place.Rows.Count > 1)
+            {
+                shown = ParagraphLayout.Wrap(text, place.Rows);
+                size = Math.Max(MinFontSize, boxes.FontSize * place.Scale);
+            }
+            else if (box.Width > slot.Width && place.Scale >= 1)
+            {
+                size = boxes.FontSize;   // the room beside the line was enough
+            }
+            else
+            {
+                size = FitFontSize(text, box.Width, slot.Height);
+            }
+
+            // The label of a button whose box grew on both sides stays in the middle of
+            // it. Only a single row that shows whole: rows start under each other, as
+            // wrapped text does, and text that is cut off is cut off at its end.
+            centred = place.Centred && place.Rows.Count == 1 && box.Width > slot.Width
+                && MeasureWidth(text, size) <= box.Width;
+        }
+        else
+        {
+            size = FitFontSize(text, slot.Width, slot.Height);
         }
 
-        var tb = boxes.Lines[0].Text;
-        tb.Text = text;
-        tb.FontSize = FitFontSize(text, tb.Width, tb.Height);
+        tb.Text = shown;
+        tb.FontSize = size;
+        tb.Width = box.Width;
+        tb.Height = box.Height;
+        tb.TextAlignment = centred ? TextAlignment.Center : TextAlignment.Left;
+        LetTextBreathe(tb, box.Height, rows: shown.Count(c => c == '\n') + 1);
+        border.Width = box.Width + padX * 2;
+        border.Height = box.Height + padY * 2;
+        Canvas.SetLeft(border, box.X - padX);
+        Canvas.SetTop(border, box.Y - padY);
     }
 
     private void ApplyParagraph(BlockBoxes boxes, string text)
@@ -495,7 +606,22 @@ public partial class OverlayWindow : Window
             double padX = border.Padding.Left;
             border.Width = tb.Width + padX * 2;
             Canvas.SetLeft(border, x0 - padX);
+            LetTextBreathe(tb, slot.Height, rows: 1);
         }
+    }
+
+    /// <summary>
+    /// The text box is as tall as the OCR line, but a line of text at the chosen font can
+    /// be a little taller (small lines at 125/150 % keep an 8 DIP font). The box then grows
+    /// evenly into the fill's margin, so the bottoms of g, p and y are not cut off; the
+    /// text stays where it was.
+    /// </summary>
+    private static void LetTextBreathe(TextBox tb, double height, int rows)
+    {
+        double need = rows * tb.FontSize * OverlayFont.LineSpacing;
+        double extra = Math.Max(0, need - height) / 2;
+        tb.Height = height + 2 * extra;
+        tb.Margin = new Thickness(0, -extra, 0, -extra);
     }
 
     /// <summary>The largest font size, from <paramref name="startSize"/> down, at which the text fits the width.</summary>
@@ -541,7 +667,7 @@ public partial class OverlayWindow : Window
     /// layout GDI+ gives for the bitmaps <see cref="Native.ScreenCapture"/> creates, which
     /// is the same assumption <see cref="OcrService"/> makes when it converts them.
     /// </summary>
-    private sealed class PixelReader : IDisposable
+    private sealed class PixelReader : IPixels, IDisposable
     {
         private readonly DBitmap _bitmap;
         private readonly BitmapData _data;
@@ -561,23 +687,19 @@ public partial class OverlayWindow : Window
         }
 
         /// <summary>Caller must keep x/y inside the bitmap — the hot path does not re-check.</summary>
-        public (byte R, byte G, byte B) Get(int x, int y)
-        {
-            int bgra = Marshal.ReadInt32(_data.Scan0, y * _data.Stride + x * 4);
-            return ((byte)((bgra >> 16) & 0xFF), (byte)((bgra >> 8) & 0xFF), (byte)(bgra & 0xFF));
-        }
+        public int Rgb(int x, int y) =>
+            Marshal.ReadInt32(_data.Scan0, y * _data.Stride + x * 4) & 0xFFFFFF;
 
         public void Dispose() => _bitmap.UnlockBits(_data);
     }
 
-    private static (Color bg, Color fg) SampleColors(PixelReader pixels, Rect rect)
+    /// <summary>The fill and text colours for a line: what is around it on the screenshot.</summary>
+    private (Color bg, Color fg) SampleColors(PixelReader pixels, Rect rect)
     {
         int left   = (int)Math.Floor(rect.X);
         int top    = (int)Math.Floor(rect.Y);
         int right  = (int)Math.Ceiling(rect.X + rect.Width);
         int bottom = (int)Math.Ceiling(rect.Y + rect.Height);
-
-        long r = 0, g = 0, b = 0, n = 0;
 
         int pad = Math.Max(2, (bottom - top) / 6);
         int x0 = Math.Clamp(left  - pad, 0, pixels.Width  - 1);
@@ -593,39 +715,30 @@ public partial class OverlayWindow : Window
         int rightEdge  = Math.Clamp(right + 1,  0, pixels.Width  - 1);
         int bottomRow  = Math.Clamp(bottom,     0, pixels.Height - 1);
 
-        SampleStrip(pixels, x0, y0, x1, Math.Max(y0, topEdge - 1), ref r, ref g, ref b, ref n);
-        SampleStrip(pixels, x0, Math.Min(y1, bottomEdge), x1, y1,  ref r, ref g, ref b, ref n);
-        SampleStrip(pixels, x0, topEdge, Math.Max(x0, leftEdge), bottomRow, ref r, ref g, ref b, ref n);
-        SampleStrip(pixels, Math.Min(x1, rightEdge), topEdge, x1, bottomRow, ref r, ref g, ref b, ref n);
+        int n = 0;
+        SampleStrip(pixels, x0, y0, x1, Math.Max(y0, topEdge - 1), ref n);
+        SampleStrip(pixels, x0, Math.Min(y1, bottomEdge), x1, y1,  ref n);
+        SampleStrip(pixels, x0, topEdge, Math.Max(x0, leftEdge), bottomRow, ref n);
+        SampleStrip(pixels, Math.Min(x1, rightEdge), topEdge, x1, bottomRow, ref n);
 
-        Color bg;
-        if (n == 0)
-            bg = Color.FromArgb(0xFF, 0, 0, 0);
-        else
-        {
-            byte br = (byte)(r / n), bgc = (byte)(g / n), bb = (byte)(b / n);
-            // Opaque: the fill must fully hide the original characters underneath,
-            // otherwise they "ghost" through behind the translation.
-            bg = Color.FromArgb(0xFF, br, bgc, bb);
-        }
+        // Opaque: the fill must fully hide the original characters underneath,
+        // otherwise they "ghost" through behind the translation.
+        int rgb = Backdrop.Colour(_samples.AsSpan(0, n));
+        var bg = Color.FromArgb(0xFF, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
 
         double lum = 0.2126 * bg.R + 0.7152 * bg.G + 0.0722 * bg.B;
         var fg = lum < 140 ? Colors.White : Colors.Black;
         return (bg, fg);
     }
 
-    private static void SampleStrip(PixelReader pixels, int x0, int y0, int x1, int y1,
-                                    ref long r, ref long g, ref long b, ref long n)
+    private void SampleStrip(PixelReader pixels, int x0, int y0, int x1, int y1, ref int n)
     {
         if (x1 <= x0 || y1 <= y0) return;
         int stepX = Math.Max(1, (x1 - x0) / 12);
         int stepY = Math.Max(1, (y1 - y0) / 4);
         for (int y = y0; y < y1; y += stepY)
-        for (int x = x0; x < x1; x += stepX)
-        {
-            var (pr, pg, pb) = pixels.Get(x, y);
-            r += pr; g += pg; b += pb; n++;
-        }
+        for (int x = x0; x < x1 && n < _samples.Length; x += stepX)
+            _samples[n++] = pixels.Rgb(x, y);
     }
 
     private ContextMenu BuildContextMenu(OcrBlock block)
