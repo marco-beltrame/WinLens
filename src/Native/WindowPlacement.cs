@@ -37,6 +37,23 @@ internal static class WindowPlacement
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
     /// <summary>px → DIP factor for the system (primary) DPI; a first guess before the HWND exists.</summary>
     public static double SystemPixelToDip()
     {
@@ -97,6 +114,24 @@ internal static class WindowPlacement
     /// <summary>Moves the window's top-left to (<paramref name="x"/>, <paramref name="y"/>) physical px, keeping its size.</summary>
     public static void MoveTo(IntPtr hwnd, int x, int y) =>
         SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+    /// <summary>Where the window is now, in physical px.</summary>
+    public static DRectangle? BoundsOf(IntPtr hwnd) =>
+        GetWindowRect(hwnd, out var r)
+            ? DRectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom)
+            : null;
+
+    /// <summary>
+    /// The part of the window's monitor that is free of the taskbar, in physical px.
+    /// </summary>
+    public static DRectangle? WorkAreaOf(IntPtr hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info)) return null;
+        var w = info.rcWork;
+        return DRectangle.FromLTRB(w.Left, w.Top, w.Right, w.Bottom);
+    }
 
     private static void Apply(IntPtr hwnd, DRectangle b) =>
         SetWindowPos(hwnd, IntPtr.Zero, b.X, b.Y, b.Width, b.Height, SWP_NOZORDER | SWP_NOACTIVATE);

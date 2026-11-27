@@ -20,6 +20,16 @@ All notable changes to this project are documented here. The format is based on
   entry or a chat message first uses the free space next to it, then goes onto a second or
   third row, and only after that gets a smaller font. This shows most from Chinese or Japanese
   into English and other European languages.
+- A new look across the app: cleaner control panel, tray menu, overlay bar and loading
+  indicator, with a single accent colour and simple line icons.
+- WinLens follows the Windows light or dark mode, and switches as soon as Windows does.
+  **Theme** in the control panel can also keep it always light or always dark.
+- The tray menu shows the current shortcuts next to **Translate screen** and
+  **Translate region**; **Open WinLens** is now **Settings**.
+- The control panel has a **Region** button next to **Translate screen**, and shows each
+  shortcut as keys: click it to change it.
+- "Detect text in" is now **Translate from**, and the link to add OCR languages moved to the
+  bottom of that list.
 
 ### Fixed
 - The box behind a translation takes the exact colour of a flat background, so it no longer

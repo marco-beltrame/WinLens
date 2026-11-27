@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
@@ -25,8 +27,12 @@ public readonly record struct HotkeyApplyResult(bool Ok, bool FullFailed, bool R
 
 public partial class SettingsWindow : Window
 {
+    /// <summary>Transparent margin around the visible window, where its shadow is drawn (DIPs).</summary>
+    private const double ShadowMargin = 24;
+
     private readonly SettingsService _settings;
     private readonly Action _onTranslate;
+    private readonly Action _onTranslateRegion;
 
     /// <summary>
     /// Applies a shortcut pair and reports whether the OS accepted it. A refused change is
@@ -43,6 +49,9 @@ public partial class SettingsWindow : Window
     /// <summary>Tries an engine configuration without making it the active one.</summary>
     private readonly Func<EngineOptions, Task<EngineTestResult>> _onTestEngine;
 
+    /// <summary>Tag value the ShortcutButton style reads as "recording the next key press".</summary>
+    private const string CapturingTag = "capturing";
+
     private bool _suppressEvents;
     private bool _capturing;
     private bool _capturingRegion;
@@ -50,6 +59,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         SettingsService settings,
         Action onTranslate,
+        Action onTranslateRegion,
         Func<HotkeyModifiers, Key, HotkeyModifiers, Key, HotkeyApplyResult> onApplyHotkeys,
         Action<bool> onHotkeyCapturePaused,
         Action onEngineChanged,
@@ -60,11 +70,25 @@ public partial class SettingsWindow : Window
         // A closed dropdown would otherwise switch its selection under the wheel (changing
         // engine or language by accident while scrolling): scroll the page instead.
         ContentScroll.AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnContentWheel), true);
-        // From the assembly, so the footer can't fall behind the release again.
+        // From the assembly, so it can't fall behind the release again.
         var version = typeof(SettingsWindow).Assembly.GetName().Version;
-        if (version != null) FooterText.Text = $"WinLens v{version.ToString(3)}";
+        if (version != null) VersionText.Text = version.ToString(3);
+
+        // The window is as tall as its content, up to the screen: a first guess from the
+        // primary monitor here, the real one once the window knows where it is.
+        MaxHeight = SystemParameters.WorkArea.Height + 2 * ShadowMargin;
+        SourceInitialized += (_, _) => FitToWorkArea();
+        SizeChanged += (_, _) => FitToWorkArea();
+        // Windows centres the window on the monitor under the pointer only after those two,
+        // and that monitor may be a smaller one.
+        Loaded += (_, _) => FitToWorkArea();
+        // Dragged onto a monitor with another scaling: only the cap, once WPF has switched
+        // over. Moving the window here would pull it out of the user's hand.
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(new Action(() => FitToWorkArea(reposition: false)));
+
         _settings = settings;
         _onTranslate = onTranslate;
+        _onTranslateRegion = onTranslateRegion;
         _onApplyHotkeys = onApplyHotkeys;
         _onHotkeyCapturePaused = onHotkeyCapturePaused;
         _onEngineChanged = onEngineChanged;
@@ -79,6 +103,7 @@ public partial class SettingsWindow : Window
         UpdateHotkeyText();
         UpdateRegionHotkeyText();
         LoadEngineUi();
+        LoadThemeUi();
 
         _suppressEvents = false;
 
@@ -103,15 +128,63 @@ public partial class SettingsWindow : Window
     private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.NewValue is not true) { EndCaptureIfActive(); CommitEngineFields(); return; }
+        FitToWorkArea(); // the monitors may have changed while the window was hidden
         _suppressEvents = true;
         RebuildLanguageOptions(); // float most-recent targets to the top
         BuildSourceOptions();
         RefreshStartupToggle(); // may have changed via Task Manager / Windows Settings
         _suppressEvents = false;
+        AnimateIn();
     }
 
-    private void OnAddLanguages(object sender, MouseButtonEventArgs e)
+    /// <summary>
+    /// A short fade and rise each time the window appears. Leaving is instant on purpose:
+    /// the window hides right before a screenshot and must be gone by then.
+    /// </summary>
+    private void AnimateIn()
     {
+        if (!SystemParameters.ClientAreaAnimation) return; // Windows: animations turned off
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        Chrome.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease });
+        ChromeShift.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+    }
+
+    /// <summary>
+    /// Caps the height at the monitor the window is on, and moves the window up when
+    /// growing (a custom engine shows more rows) would push its lower edge off that
+    /// monitor, but never so far that the title bar leaves it. Worked out in physical
+    /// pixels: WPF's own Top/Left are unreliable across monitors with different scaling.
+    /// </summary>
+    private void FitToWorkArea(bool reposition = true)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero || WindowState != WindowState.Normal) return;
+        if (WindowPlacement.WorkAreaOf(hwnd) is not { } work) return;
+        if (WindowPlacement.BoundsOf(hwnd) is not { } bounds) return;
+
+        double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        if (scale <= 0) scale = 1;
+        int shadow = (int)Math.Round(ShadowMargin * scale);
+
+        // The shadow margin may hang over the edge; the visible part may not.
+        double maxHeight = work.Height / scale + 2 * ShadowMargin;
+        if (Math.Abs(MaxHeight - maxHeight) > 0.5) MaxHeight = maxHeight;
+        if (!reposition) return;
+
+        // Layout knows the new height before the HWND has caught up; take the larger.
+        int bottom = Math.Max(bounds.Bottom, bounds.Top + (int)Math.Round(ActualHeight * scale));
+        int overflow = bottom - shadow - work.Bottom;
+        int top = overflow > 0 ? bounds.Top - overflow : bounds.Top;
+        top = Math.Max(work.Top - shadow, top);
+        if (top != bounds.Top) WindowPlacement.MoveTo(hwnd, bounds.Left, top);
+    }
+
+    private void OnAddLanguages(object sender, RoutedEventArgs e)
+    {
+        SourceCombo.IsDropDownOpen = false;
         try
         {
             Process.Start(new ProcessStartInfo("ms-settings:regionlanguage") { UseShellExecute = true });
@@ -175,15 +248,6 @@ public partial class SettingsWindow : Window
         ModelPanel.Visibility = llm ? Visibility.Visible : Visibility.Collapsed;
         EngineStatus.Text = "";
 
-        // Google needs no explanation; the other two say what they connect to.
-        EngineCaption.Text = engine switch
-        {
-            EngineNames.LibreTranslate => "Your own server, or a hosted one with its API key.",
-            EngineNames.LocalLlm => "Ollama, LM Studio or any OpenAI-compatible server on your PC.",
-            _ => "",
-        };
-        EngineCaption.Visibility = EngineCaption.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-
         EngineUrlBox.Text = llm ? s.LlmUrl : s.LibreTranslateUrl;
         EngineUrlBox.Tag = llm ? UserSettings.DefaultLlmUrl : "http://localhost:5000";
         EngineModelBox.Text = s.LlmModel;
@@ -244,6 +308,11 @@ public partial class SettingsWindow : Window
         _onEngineChanged();
     }
 
+    /// <summary>The "Optional" placeholder shows only while the key box is empty.</summary>
+    private void OnEngineKeyChanged(object sender, RoutedEventArgs e) =>
+        EngineKeyHint.Visibility = EngineKeyBox.SecurePassword.Length == 0
+            ? Visibility.Visible : Visibility.Collapsed;
+
     private void OnFallbackToggled(object sender, RoutedEventArgs e)
     {
         if (_suppressEvents) return;
@@ -261,27 +330,27 @@ public partial class SettingsWindow : Window
         }
 
         TestEngineButton.IsEnabled = false;
-        EngineStatus.Foreground = (Brush)FindResource("TextSubtleBrush");
+        SetStatusColor("TextSubtleBrush");
         EngineStatus.Text = "Testing…";
         try
         {
             var result = await _onTestEngine(_settings.Current.ToEngineOptions());
             if (result.Ok)
             {
-                EngineStatus.Foreground = (Brush)FindResource("SuccessBrush");
+                SetStatusColor("SuccessBrush");
                 var model = result.Model != null && EngineModelBox.Text.Trim().Length == 0
                     ? $" Using {result.Model}." : "";
                 EngineStatus.Text = $"Works: \u201c{result.Sample}\u201d.{model}";
             }
             else
             {
-                EngineStatus.Foreground = (Brush)FindResource("DangerBrush");
+                SetStatusColor("DangerBrush");
                 EngineStatus.Text = result.Message;
             }
         }
         catch (Exception ex)
         {
-            EngineStatus.Foreground = (Brush)FindResource("DangerBrush");
+            SetStatusColor("DangerBrush");
             EngineStatus.Text = ex.Message;
         }
         finally
@@ -289,6 +358,10 @@ public partial class SettingsWindow : Window
             TestEngineButton.IsEnabled = true;
         }
     }
+
+    /// <summary>By resource name rather than brush, so the colour follows a theme change.</summary>
+    private void SetStatusColor(string brushKey) =>
+        EngineStatus.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
 
     // ---------------- Source (OCR) language ----------------
 
@@ -322,6 +395,14 @@ public partial class SettingsWindow : Window
         _onTranslate();
     }
 
+    private async void OnTranslateRegion(object sender, RoutedEventArgs e)
+    {
+        EndCaptureIfActive();
+        Hide();
+        await Task.Delay(160); // gone before the region selector dims the screen
+        _onTranslateRegion();
+    }
+
     // ---------------- Hotkey capture ----------------
 
     private void OnChangeHotkey(object sender, RoutedEventArgs e)
@@ -350,19 +431,8 @@ public partial class SettingsWindow : Window
         // other action's combination to swap them.
         _onHotkeyCapturePaused(true);
 
-        var accent = (Brush)FindResource("AccentBrush");
-        if (region)
-        {
-            RegionHotkeyText.Text = "Press keys…";
-            RegionHotkeyChip.BorderBrush = accent;
-            ChangeRegionHotkeyButton.Content = "Cancel";
-        }
-        else
-        {
-            HotkeyText.Text = "Press keys…";
-            HotkeyChip.BorderBrush = accent;
-            ChangeHotkeyButton.Content = "Cancel";
-        }
+        // The button's own template turns this into the "Press keys…" prompt.
+        (region ? ChangeRegionHotkeyButton : ChangeHotkeyButton).Tag = CapturingTag;
         Focus();
     }
 
@@ -379,11 +449,8 @@ public partial class SettingsWindow : Window
         HotkeyMessage.Visibility = Visibility.Collapsed;
         RegionHotkeyMessage.Visibility = Visibility.Collapsed;
 
-        var idle = (Brush)FindResource("BorderBrush");
-        HotkeyChip.BorderBrush = idle;
-        RegionHotkeyChip.BorderBrush = idle;
-        ChangeHotkeyButton.Content = "Change";
-        ChangeRegionHotkeyButton.Content = "Change";
+        ChangeHotkeyButton.Tag = null;
+        ChangeRegionHotkeyButton.Tag = null;
         UpdateHotkeyText();
         UpdateRegionHotkeyText();
 
@@ -416,7 +483,7 @@ public partial class SettingsWindow : Window
             ShowHotkeyMessage(check switch
             {
                 HotkeyCheck.NeedsModifier => "Hold Ctrl, Alt or Win together with the key.",
-                HotkeyCheck.Reserved => $"{FormatHotkey(mods, key)} is a common system shortcut. Try another.",
+                HotkeyCheck.Reserved => $"{HotkeyText.Format(mods, key, " + ")} is a common system shortcut. Try another.",
                 _ => "That key can't be used. Try another.",
             });
             return; // keep capturing
@@ -460,9 +527,9 @@ public partial class SettingsWindow : Window
             // Name the combination the OS actually refused (with a swap it may be the
             // other action's, not the one just typed).
             var failed = new List<string>();
-            if (result.FullFailed) failed.Add(FormatHotkey(fullMods, fullKey));
-            if (result.RegionFailed) failed.Add(FormatHotkey(regionMods, regionKey));
-            var name = failed.Count > 0 ? string.Join(" and ", failed) : FormatHotkey(mods, key);
+            if (result.FullFailed) failed.Add(HotkeyText.Format(fullMods, fullKey, " + "));
+            if (result.RegionFailed) failed.Add(HotkeyText.Format(regionMods, regionKey, " + "));
+            var name = failed.Count > 0 ? string.Join(" and ", failed) : HotkeyText.Format(mods, key, " + ");
             MessageBox.Show(
                 this,
                 $"Windows would not give WinLens {name} — another app is "
@@ -514,21 +581,31 @@ public partial class SettingsWindow : Window
         Key.LWin or Key.RWin or Key.System;
 
     private void UpdateHotkeyText() =>
-        HotkeyText.Text = FormatHotkey(_settings.Current.HotkeyModifiers, _settings.Current.HotkeyKey);
+        HotkeyKeys.ItemsSource = HotkeyText.Parts(
+            _settings.Current.HotkeyModifiers, _settings.Current.HotkeyKey);
 
     private void UpdateRegionHotkeyText() =>
-        RegionHotkeyText.Text = FormatHotkey(
+        RegionHotkeyKeys.ItemsSource = HotkeyText.Parts(
             _settings.Current.RegionHotkeyModifiers, _settings.Current.RegionHotkeyKey);
 
-    private static string FormatHotkey(HotkeyModifiers mods, Key key)
+    // ---------------- Theme ----------------
+
+    private void LoadThemeUi()
     {
-        var parts = new List<string>();
-        if (mods.HasFlag(HotkeyModifiers.Control)) parts.Add("Ctrl");
-        if (mods.HasFlag(HotkeyModifiers.Alt))     parts.Add("Alt");
-        if (mods.HasFlag(HotkeyModifiers.Shift))   parts.Add("Shift");
-        if (mods.HasFlag(HotkeyModifiers.Win))     parts.Add("Win");
-        parts.Add(key.ToString());
-        return string.Join("  +  ", parts);
+        var theme = _settings.Current.Theme;
+        ThemeCombo.SelectedIndex = 0;
+        foreach (ComboBoxItem item in ThemeCombo.Items)
+            if (item.Tag as string == theme)
+                ThemeCombo.SelectedItem = item;
+    }
+
+    private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        var theme = (ThemeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "system";
+        _settings.Current.Theme = theme;
+        _settings.Save(_settings.Current);
+        WinLens.Theme.ThemeManager.SetPreference(theme);
     }
 
     // ---------------- Startup ----------------

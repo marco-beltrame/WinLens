@@ -25,33 +25,35 @@
              change cannot clear the screenshot underneath. -->
         <Canvas x:Name="OverlayCanvas" Background="#01000000"/>
 
-        <!-- Floating control bar -->
-        <Border x:Name="TopBar"
-                HorizontalAlignment="Center" VerticalAlignment="Top"
-                Margin="0,16,0,0"
-                CornerRadius="12" Padding="14,8"
-                Background="#F01A1D24"
-                BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="4" Opacity="0.5"/>
-            </Border.Effect>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Image Width="22" Height="22" Source="/assets/logo.png" Margin="0,0,10,0"
-                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                <TextBlock Text="WinLens" Foreground="{StaticResource TextBrush}"
-                           FontFamily="Segoe UI" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Margin="0,0,14,0"/>
-                <ComboBox x:Name="LanguageBox" Width="150" Height="34"
-                          Style="{StaticResource ModernComboBox}"
-                          VerticalAlignment="Center"
-                          SelectionChanged="OnLanguageChanged"/>
-                <TextBlock Text="Esc to close" Foreground="{StaticResource TextFaintBrush}"
-                           FontFamily="Segoe UI" FontSize="11"
-                           VerticalAlignment="Center" Margin="14,0,4,0"/>
-                <Button x:Name="CloseBtn" Content="Close" Height="34" Padding="12,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Margin="8,0,0,0" Click="OnCloseClick"/>
-            </StackPanel>
-        </Border>
+        <!-- Floating control bar. The backing shape casts the shadow, so the controls
+             above it are drawn directly instead of through the blur effect. -->
+        <Grid x:Name="TopBar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0">
+            <Border CornerRadius="12" Background="{DynamicResource PopupBrush}">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="5" Direction="270"
+                                      Opacity="0.4"/>
+                </Border.Effect>
+            </Border>
+            <Border CornerRadius="12" Padding="7"
+                    Background="{DynamicResource PopupBrush}"
+                    BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Width="22" Height="22" Source="{StaticResource LogoImage}" Margin="5,0,10,0"
+                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <ComboBox x:Name="LanguageBox" Width="172"
+                              Style="{StaticResource ModernComboBox}"
+                              VerticalAlignment="Center"
+                              SelectionChanged="OnLanguageChanged"
+                              AutomationProperties.Name="Translate to"/>
+                    <Border Width="1" Height="18" Margin="8,0,6,0"
+                            Background="{DynamicResource BorderStrongBrush}"/>
+                    <Button x:Name="CloseBtn" Style="{StaticResource IconButton}"
+                            Click="OnCloseClick" ToolTip="Close (Esc)"
+                            AutomationProperties.Name="Close">
+                        <Path Style="{StaticResource Icon}" Data="{StaticResource IconClose}"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

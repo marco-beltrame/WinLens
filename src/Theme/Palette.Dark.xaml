@@ -1,0 +1,44 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Dark palette. Palette.Light.xaml defines the same keys; ThemeManager swaps one for
+         the other to follow the Windows app mode, so every style reads these through
+         DynamicResource. -->
+
+    <!-- Surfaces, from the back forward -->
+    <SolidColorBrush x:Key="WindowBrush"         Color="#16171B"/>
+    <SolidColorBrush x:Key="CardBrush"           Color="#1E1F25"/>
+    <SolidColorBrush x:Key="ControlBrush"        Color="#282A32"/>
+    <SolidColorBrush x:Key="ControlHoverBrush"   Color="#31333C"/>
+    <SolidColorBrush x:Key="ControlPressedBrush" Color="#24262D"/>
+    <SolidColorBrush x:Key="PopupBrush"          Color="#22242B"/>
+
+    <!-- Lines -->
+    <SolidColorBrush x:Key="BorderBrush"         Color="#2A2C34"/>
+    <SolidColorBrush x:Key="BorderStrongBrush"   Color="#393B46"/>
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextBrush"           Color="#F2F2F5"/>
+    <SolidColorBrush x:Key="TextSubtleBrush"     Color="#A6A8B3"/>
+    <SolidColorBrush x:Key="TextFaintBrush"      Color="#8B8D99"/>
+
+    <!-- Accent -->
+    <SolidColorBrush x:Key="AccentBrush"         Color="#6E5FF2"/>
+    <SolidColorBrush x:Key="AccentHoverBrush"    Color="#7969F5"/>
+    <SolidColorBrush x:Key="AccentPressedBrush"  Color="#6254DE"/>
+    <SolidColorBrush x:Key="AccentTextBrush"     Color="#A9A0FF"/>
+    <SolidColorBrush x:Key="AccentSoftBrush"     Color="#2A2850"/>
+    <SolidColorBrush x:Key="OnAccentBrush"       Color="#FFFFFF"/>
+
+    <!-- Status -->
+    <SolidColorBrush x:Key="DangerBrush"         Color="#FF7B7B"/>
+    <SolidColorBrush x:Key="SuccessBrush"        Color="#5FD08B"/>
+
+    <!-- Keycaps -->
+    <SolidColorBrush x:Key="KeycapBrush"         Color="#2C2E37"/>
+    <SolidColorBrush x:Key="KeycapBorderBrush"   Color="#3F414D"/>
+
+    <sys:Double x:Key="ShadowOpacity">0.5</sys:Double>
+
+</ResourceDictionary>

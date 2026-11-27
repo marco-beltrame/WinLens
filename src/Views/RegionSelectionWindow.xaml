@@ -15,24 +15,26 @@
         <Rectangle x:Name="DimBottom" Fill="#80000000"/>
         <Rectangle x:Name="DimLeft"   Fill="#80000000"/>
         <Rectangle x:Name="DimRight"  Fill="#80000000"/>
+        <!-- Fixed colours, not the theme's: this is drawn over a dimmed screenshot of
+             anything at all, where only light on dark is sure to read. -->
         <Rectangle x:Name="SelectionRect"
-                   Stroke="#7B6CF6"
+                   Stroke="#A9A0FF"
                    StrokeThickness="2"
                    Fill="Transparent"
                    Visibility="Collapsed"
                    IsHitTestVisible="False"/>
         <Border x:Name="SizeChip"
-                Background="#CC0E0F13"
-                BorderBrush="#3A4150"
+                Background="#E616171B"
+                BorderBrush="#393B46"
                 BorderThickness="1"
-                CornerRadius="4"
-                Padding="6,3"
+                CornerRadius="6"
+                Padding="7,3"
                 Visibility="Collapsed"
                 IsHitTestVisible="False">
             <TextBlock x:Name="SizeText"
-                       Foreground="#ECEEF3"
-                       FontFamily="Segoe UI"
-                       FontSize="11"
+                       Foreground="#F2F2F5"
+                       FontFamily="{StaticResource UiFont}"
+                       FontSize="11.5"
                        FontWeight="SemiBold"/>
         </Border>
     </Canvas>

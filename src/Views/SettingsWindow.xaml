@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="WinLens"
         Icon="/assets/winlens.ico"
-        Width="440" Height="756"
+        Width="456"
+        SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -11,201 +12,379 @@
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal"
-        FontFamily="Segoe UI">
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        Foreground="{DynamicResource TextBrush}">
 
-    <Border Margin="16" CornerRadius="16"
-            Background="{StaticResource BgBrush}"
-            BorderBrush="{StaticResource BorderStrongBrush}"
-            BorderThickness="1">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="32" ShadowDepth="6" Opacity="0.55"/>
-        </Border.Effect>
+    <Window.Resources>
+        <!-- A shortcut shown as keys; ItemsSource is the list of key names. -->
+        <Style x:Key="Keycaps" TargetType="ItemsControl">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Keycap}">
+                            <TextBlock Text="{Binding}" FontSize="11.5" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- The shortcut itself is the button that changes it. Tag="capturing" while the
+             next key press is being recorded. -->
+        <Style x:Key="ShortcutButton" TargetType="Button">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="8" Padding="6,0,7,0"
+                                Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ContentPresenter x:Name="Keys" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="Prompt" Text="Press keys…" Visibility="Collapsed"
+                                           Margin="4,0,6,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AccentTextBrush}"/>
+                                <Path x:Name="Glyph" Style="{StaticResource Icon}" Data="{StaticResource IconEdit}"
+                                      Margin="2,0,0,0" Stroke="{DynamicResource TextFaintBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBrush}"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource TextSubtleBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlPressedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="capturing">
+                                <Setter TargetName="Keys" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Prompt" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="{StaticResource IconClose}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
-            <!-- ============== Title bar ============== -->
-            <Grid x:Name="TitleBar" Grid.Row="0" Height="48" Background="Transparent"
-                  MouseLeftButtonDown="OnTitleBarDrag">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-                    <Image Width="28" Height="28" Source="/assets/logo.png"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <TextBlock Text="WinLens" Foreground="{StaticResource TextBrush}"
-                               FontSize="14" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Margin="10,0,0,0"/>
-                </StackPanel>
+    <!-- The margin is room for the shadow. The shadow is cast by a plain backing shape so
+         the content above it is drawn directly, not through the blur effect. -->
+    <Grid x:Name="Chrome" Margin="24">
+        <Grid.RenderTransform>
+            <TranslateTransform x:Name="ChromeShift"/>
+        </Grid.RenderTransform>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Margin="0,0,10,0">
-                    <Button Style="{StaticResource TitleBarButton}" Click="OnMinimize" Content="&#xE921;"
-                            FontFamily="Segoe MDL2 Assets" FontSize="10"/>
-                    <Button Style="{StaticResource CloseButton}" Click="OnClose" Content="&#xE8BB;"
-                            FontFamily="Segoe MDL2 Assets" FontSize="10"/>
-                </StackPanel>
+        <Border CornerRadius="12" Background="{DynamicResource WindowBrush}">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="5" Direction="270"
+                                  Opacity="{DynamicResource ShadowOpacity}"/>
+            </Border.Effect>
+        </Border>
+
+        <Border CornerRadius="12"
+                Background="{DynamicResource WindowBrush}"
+                BorderBrush="{DynamicResource BorderStrongBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- ============== Title bar ============== -->
+                <!-- Tab reaches Minimize and Close after the settings, not before them. -->
+                <Grid x:Name="TitleBar" Grid.Row="0" Height="44" Background="Transparent"
+                      KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="2"
+                      MouseLeftButtonDown="OnTitleBarDrag">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0"
+                                IsHitTestVisible="False">
+                        <Image Width="20" Height="20" Source="{StaticResource LogoImage}"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="WinLens" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="9,0,0,0"/>
+                        <TextBlock x:Name="VersionText" FontSize="11.5"
+                                   Foreground="{DynamicResource TextFaintBrush}"
+                                   VerticalAlignment="Center" Margin="7,1,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Margin="0,0,8,0">
+                        <Button Style="{StaticResource TitleBarButton}" Click="OnMinimize"
+                                AutomationProperties.Name="Minimize">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource IconMinimize}"/>
+                        </Button>
+                        <Button Style="{StaticResource CloseButton}" Click="OnClose"
+                                AutomationProperties.Name="Close">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource IconClose}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============== Content ============== -->
+                <!-- Scrolls, so the window still works where the full list is taller than
+                     the screen (a custom engine on a small laptop display). -->
+                <ScrollViewer x:Name="ContentScroll" Grid.Row="1" Style="{StaticResource OverlayScrollViewer}"
+                              KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="1">
+                    <StackPanel Margin="16,4,16,16">
+
+                        <!-- Actions -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="TranslateButton" Grid.Column="0" Style="{StaticResource PrimaryButton}"
+                                    Click="OnTranslateNow" AutomationProperties.Name="Translate screen">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Style="{StaticResource Icon}" Data="{StaticResource IconScreen}"/>
+                                    <TextBlock Text="Translate screen" Margin="9,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="RegionButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
+                                    Height="40" Padding="16,0" Margin="8,0,0,0"
+                                    Background="{DynamicResource CardBrush}"
+                                    BorderBrush="{DynamicResource BorderStrongBrush}"
+                                    Click="OnTranslateRegion" AutomationProperties.Name="Region">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Style="{StaticResource Icon}" Data="{StaticResource IconRegion}"/>
+                                    <TextBlock Text="Region" Margin="9,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Languages -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Translate from" Style="{StaticResource RowLabel}"/>
+                                    <!-- The languages Windows can read (OCR). The footer opens the
+                                         Windows page where more can be installed. -->
+                                    <ComboBox x:Name="SourceCombo" Grid.Column="1" Width="208"
+                                              Style="{StaticResource ModernComboBox}"
+                                              DisplayMemberPath="Label" SelectionChanged="OnSourceChanged"
+                                              AutomationProperties.Name="Translate from">
+                                        <ComboBox.Tag>
+                                            <StackPanel>
+                                                <Separator/>
+                                                <Button Style="{StaticResource DropdownFooterButton}" Click="OnAddLanguages">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Path Style="{StaticResource Icon}" Data="{StaticResource IconAdd}"/>
+                                                        <TextBlock Text="Add languages…" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </ComboBox.Tag>
+                                    </ComboBox>
+                                </Grid>
+                                <Border Style="{StaticResource RowLine}"/>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Translate to" Style="{StaticResource RowLabel}"/>
+                                    <ComboBox x:Name="LanguageCombo" Grid.Column="1" Width="208"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectionChanged="OnLanguageChanged"
+                                              AutomationProperties.Name="Translate to"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Translation engine -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Translation engine" Style="{StaticResource RowLabel}"/>
+                                    <ComboBox x:Name="EngineCombo" Grid.Column="1" Width="208"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectionChanged="OnEngineChanged"
+                                              AutomationProperties.Name="Translation engine">
+                                        <ComboBoxItem Tag="google" Content="Google Translate"/>
+                                        <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
+                                        <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- Only for an engine the user runs or rents themselves. -->
+                                <StackPanel x:Name="EnginePanel" Visibility="Collapsed">
+                                    <Border Style="{StaticResource RowLine}"/>
+                                    <Grid Style="{StaticResource Row}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Server address" Style="{StaticResource RowLabel}"/>
+                                        <TextBox x:Name="EngineUrlBox" Grid.Column="1" Width="208"
+                                                 Style="{StaticResource ModernTextBox}"
+                                                 LostKeyboardFocus="OnEngineFieldCommitted"
+                                                 AutomationProperties.Name="Server address"/>
+                                    </Grid>
+
+                                    <StackPanel x:Name="ModelPanel">
+                                        <Border Style="{StaticResource RowLine}"/>
+                                        <Grid Style="{StaticResource Row}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Model" Style="{StaticResource RowLabel}"/>
+                                            <TextBox x:Name="EngineModelBox" Grid.Column="1" Width="208"
+                                                     Style="{StaticResource ModernTextBox}"
+                                                     Tag="First model on the server"
+                                                     LostKeyboardFocus="OnEngineFieldCommitted"
+                                                     AutomationProperties.Name="Model"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource RowLine}"/>
+                                    <Grid Style="{StaticResource Row}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="API key" Style="{StaticResource RowLabel}"/>
+                                        <Grid Grid.Column="1" Width="208">
+                                            <PasswordBox x:Name="EngineKeyBox" Style="{StaticResource ModernPasswordBox}"
+                                                         LostKeyboardFocus="OnEngineFieldCommitted"
+                                                         PasswordChanged="OnEngineKeyChanged"
+                                                         AutomationProperties.Name="API key"/>
+                                            <!-- A password box has no placeholder of its own. -->
+                                            <TextBlock x:Name="EngineKeyHint" Text="Optional" Margin="12,0,0,0"
+                                                       Foreground="{DynamicResource TextFaintBrush}"
+                                                       VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowLine}"/>
+                                    <Grid Style="{StaticResource Row}" Background="Transparent"
+                                          ToolTip="For lines your server can't translate. Off keeps your text on your server.">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Use Google as a backup" Style="{StaticResource RowLabel}"/>
+                                        <!-- The row's tooltip again on the switch: a tooltip shown for keyboard
+                                             focus, and the help text a screen reader reads, come from the
+                                             focused control only. -->
+                                        <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                                  VerticalAlignment="Center" Margin="0,0,6,0"
+                                                  Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"
+                                                  ToolTip="{Binding ToolTip, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                                  AutomationProperties.HelpText="{Binding ToolTip, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                                  AutomationProperties.Name="Use Google as a backup"/>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource RowLine}"/>
+                                    <Grid Style="{StaticResource Row}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="TestEngineButton" Grid.Column="0" Style="{StaticResource SecondaryButton}"
+                                                VerticalAlignment="Center" Content="Test connection" Click="OnTestEngine"/>
+                                        <TextBlock x:Name="EngineStatus" Grid.Column="1" Margin="12,8,6,8"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12"
+                                                   Foreground="{DynamicResource TextSubtleBrush}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Shortcuts: the whole monitor under the cursor, or a dragged region -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Screen shortcut" Style="{StaticResource RowLabel}"/>
+                                    <Button x:Name="ChangeHotkeyButton" Grid.Column="1" Style="{StaticResource ShortcutButton}"
+                                            VerticalAlignment="Center" Click="OnChangeHotkey"
+                                            AutomationProperties.Name="Change the screen shortcut">
+                                        <ItemsControl x:Name="HotkeyKeys" Style="{StaticResource Keycaps}"/>
+                                    </Button>
+                                </Grid>
+                                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" Style="{StaticResource RowMessage}"/>
+
+                                <Border Style="{StaticResource RowLine}"/>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Region shortcut" Style="{StaticResource RowLabel}"/>
+                                    <Button x:Name="ChangeRegionHotkeyButton" Grid.Column="1" Style="{StaticResource ShortcutButton}"
+                                            VerticalAlignment="Center" Click="OnChangeRegionHotkey"
+                                            AutomationProperties.Name="Change the region shortcut">
+                                        <ItemsControl x:Name="RegionHotkeyKeys" Style="{StaticResource Keycaps}"/>
+                                    </Button>
+                                </Grid>
+                                <TextBlock x:Name="RegionHotkeyMessage" Visibility="Collapsed" Style="{StaticResource RowMessage}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Theme and launch at startup -->
+                        <Border Style="{StaticResource Card}" Margin="0">
+                            <StackPanel>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Theme" Style="{StaticResource RowLabel}"/>
+                                    <ComboBox x:Name="ThemeCombo" Grid.Column="1" Width="208"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectionChanged="OnThemeChanged"
+                                              AutomationProperties.Name="Theme">
+                                        <ComboBoxItem Tag="system" Content="System"/>
+                                        <ComboBoxItem Tag="light" Content="Light"/>
+                                        <ComboBoxItem Tag="dark" Content="Dark"/>
+                                    </ComboBox>
+                                </Grid>
+                                <Border Style="{StaticResource RowLine}"/>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Launch at startup" Style="{StaticResource RowLabel}"/>
+                                    <CheckBox x:Name="StartupToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                              VerticalAlignment="Center" Margin="0,0,6,0"
+                                              Checked="OnStartupToggled" Unchecked="OnStartupToggled"
+                                              AutomationProperties.Name="Launch at startup"/>
+                                </Grid>
+                                <TextBlock x:Name="StartupMessage" Visibility="Collapsed" Style="{StaticResource RowMessage}"/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
-
-            <!-- ============== Content ============== -->
-            <!-- Scrolls so the window still works on a short display (the settings list
-                 grew past what fits on a 768 px laptop screen). -->
-            <ScrollViewer x:Name="ContentScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="22,6,22,20">
-
-                <TextBlock Text="Translate your screen" Style="{StaticResource H1Text}"/>
-
-                <Button x:Name="TranslateButton" Style="{StaticResource PrimaryButton}"
-                        Margin="0,18,0,0" Click="OnTranslateNow">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Viewbox Width="18" Height="18">
-                            <Canvas Width="24" Height="24">
-                                <Ellipse Canvas.Left="3" Canvas.Top="3" Width="13" Height="13"
-                                         Stroke="White" StrokeThickness="2.2"/>
-                                <Line X1="14" Y1="14" X2="21" Y2="21" Stroke="White" StrokeThickness="2.2"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                            </Canvas>
-                        </Viewbox>
-                        <TextBlock Text="Translate now" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-
-                <!-- Target language -->
-                <TextBlock Text="TARGET LANGUAGE" Style="{StaticResource LabelText}" Margin="2,22,0,8"/>
-                <ComboBox x:Name="LanguageCombo" Style="{StaticResource ModernComboBox}"
-                          SelectionChanged="OnLanguageChanged"/>
-
-                <TextBlock Text="DETECT TEXT IN (OCR)" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
-                <ComboBox x:Name="SourceCombo" Style="{StaticResource ModernComboBox}"
-                          DisplayMemberPath="Label" SelectionChanged="OnSourceChanged"/>
-                <TextBlock x:Name="AddLangLink" Margin="2,8,0,0" Cursor="Hand"
-                           Foreground="{StaticResource AccentBrush}" FontSize="12" FontWeight="SemiBold"
-                           Text="+ Add OCR languages in Windows…"
-                           MouseLeftButtonUp="OnAddLanguages"/>
-
-                <!-- Translation engine -->
-                <TextBlock Text="TRANSLATION ENGINE" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
-                <ComboBox x:Name="EngineCombo" Style="{StaticResource ModernComboBox}"
-                          SelectionChanged="OnEngineChanged">
-                    <ComboBoxItem Tag="google" Content="Google Translate"/>
-                    <ComboBoxItem Tag="libretranslate" Content="LibreTranslate"/>
-                    <ComboBoxItem Tag="local-llm" Content="Local AI model"/>
-                </ComboBox>
-                <TextBlock x:Name="EngineCaption" Style="{StaticResource CaptionText}" Margin="2,8,0,0"
-                           TextWrapping="Wrap"/>
-
-                <StackPanel x:Name="EnginePanel" Visibility="Collapsed">
-                    <TextBlock Text="SERVER ADDRESS" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
-                    <TextBox x:Name="EngineUrlBox" Style="{StaticResource ModernTextBox}"
-                             LostKeyboardFocus="OnEngineFieldCommitted"/>
-
-                    <StackPanel x:Name="ModelPanel">
-                        <TextBlock Text="MODEL" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
-                        <TextBox x:Name="EngineModelBox" Style="{StaticResource ModernTextBox}"
-                                 Tag="First model on the server"
-                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
-                    </StackPanel>
-
-                    <TextBlock Text="API KEY (OPTIONAL)" Style="{StaticResource LabelText}" Margin="2,14,0,8"/>
-                    <PasswordBox x:Name="EngineKeyBox" Style="{StaticResource ModernPasswordBox}"
-                                 LostKeyboardFocus="OnEngineFieldCommitted"/>
-
-                    <Grid Margin="0,14,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                            <TextBlock Text="Use Google as a backup" Foreground="{StaticResource TextBrush}"
-                                       FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="For lines your server can't translate. Off keeps your text on your server."
-                                       Style="{StaticResource CaptionText}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
-                                  VerticalAlignment="Center"
-                                  Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"/>
-                    </Grid>
-
-                    <Grid Margin="0,14,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="TestEngineButton" Grid.Column="0" Style="{StaticResource SecondaryButton}"
-                                Content="Test connection" Click="OnTestEngine"/>
-                        <TextBlock x:Name="EngineStatus" Grid.Column="1" Margin="12,0,0,0"
-                                   VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12"
-                                   Foreground="{StaticResource TextSubtleBrush}"/>
-                    </Grid>
-                </StackPanel>
-
-                <!-- Shortcut: translates the monitor the cursor is on -->
-                <TextBlock Text="TRANSLATE SHORTCUT" Style="{StaticResource LabelText}" Margin="2,20,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="HotkeyChip" Grid.Column="0" Height="42" CornerRadius="10"
-                            Background="{StaticResource SurfaceAltBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                        <TextBlock x:Name="HotkeyText" VerticalAlignment="Center" Margin="14,0"
-                                   Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold"/>
-                    </Border>
-                    <Button x:Name="ChangeHotkeyButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
-                            Content="Change" Margin="10,0,0,0" Click="OnChangeHotkey"/>
-                </Grid>
-
-                <TextBlock x:Name="HotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
-                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
-
-                <!-- Shortcut (drag-selected region) -->
-                <TextBlock Text="REGION SHORTCUT" Style="{StaticResource LabelText}" Margin="2,16,0,8"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="RegionHotkeyChip" Grid.Column="0" Height="42" CornerRadius="10"
-                            Background="{StaticResource SurfaceAltBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                        <TextBlock x:Name="RegionHotkeyText" VerticalAlignment="Center" Margin="14,0"
-                                   Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold"/>
-                    </Border>
-                    <Button x:Name="ChangeRegionHotkeyButton" Grid.Column="1" Style="{StaticResource SecondaryButton}"
-                            Content="Change" Margin="10,0,0,0" Click="OnChangeRegionHotkey"/>
-                </Grid>
-
-                <TextBlock x:Name="RegionHotkeyMessage" Visibility="Collapsed" TextWrapping="Wrap"
-                           Margin="2,8,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
-
-                <!-- Launch at startup -->
-                <Grid Margin="0,22,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="Launch at startup" Foreground="{StaticResource TextBrush}"
-                                   FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="Run WinLens automatically when you sign in."
-                                   Style="{StaticResource CaptionText}" Margin="0,2,0,0"/>
-                        <TextBlock x:Name="StartupMessage" Visibility="Collapsed" TextWrapping="Wrap"
-                                   Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource DangerBrush}"/>
-                    </StackPanel>
-                    <CheckBox x:Name="StartupToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
-                              VerticalAlignment="Center"
-                              Checked="OnStartupToggled" Unchecked="OnStartupToggled"/>
-                </Grid>
-
-                <!-- Footer -->
-                <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,22,0,14"/>
-                <TextBlock x:Name="FooterText" Style="{StaticResource CaptionText}"
-                           HorizontalAlignment="Center"
-                           Text="WinLens"/>
-            </StackPanel>
-            </ScrollViewer>
-        </Grid>
-    </Border>
+        </Border>
+    </Grid>
 </Window>
