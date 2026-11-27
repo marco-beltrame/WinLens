@@ -1,84 +1,117 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="WinLens logo" width="120" />
+<img src="assets/logo.png" alt="WinLens logo" width="96" />
 
 # WinLens
 
-**Translate any text on your Windows screen, in place.**
-A desktop take on Google Lens translate.
+### Translate any text on your Windows screen, right where it is.
 
-English · [简体中文](README.zh-CN.md)
+Games, images, PDFs, foreign apps: press a shortcut and the translation appears in place of the original.
 
-[Explore the docs »](#usage)
+<a href="https://github.com/marco-beltrame/WinLens/releases/latest"><img src="https://img.shields.io/badge/Download_for_Windows-6E5FF2?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"/></a>
 
-[Report Bug](https://github.com/marco-beltrame/WinLens/issues/new?template=bug_report.yml) ·
-[Request Feature](https://github.com/marco-beltrame/WinLens/issues/new?template=feature_request.yml) ·
-[Discussions](https://github.com/marco-beltrame/WinLens/discussions)
-
+[![Release](https://img.shields.io/github/v/release/marco-beltrame/WinLens?color=6E5FF2&label=release)](https://github.com/marco-beltrame/WinLens/releases)
+[![Downloads](https://img.shields.io/github/downloads/marco-beltrame/WinLens/total?color=6E5FF2)](https://github.com/marco-beltrame/WinLens/releases)
+[![Stars](https://img.shields.io/github/stars/marco-beltrame/WinLens?style=flat&color=6E5FF2)](https://github.com/marco-beltrame/WinLens/stargazers)
 [![Build](https://github.com/marco-beltrame/WinLens/actions/workflows/build.yml/badge.svg)](https://github.com/marco-beltrame/WinLens/actions/workflows/build.yml)
-[![License: MIT](https://img.shields.io/github/license/marco-beltrame/WinLens?color=8b5cf6)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)](#installation)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![Release](https://img.shields.io/github/v/release/marco-beltrame/WinLens?color=8b5cf6)](https://github.com/marco-beltrame/WinLens/releases)
-[![Downloads](https://img.shields.io/github/downloads/marco-beltrame/WinLens/total?color=8b5cf6)](https://github.com/marco-beltrame/WinLens/releases)
-[![Stars](https://img.shields.io/github/stars/marco-beltrame/WinLens?style=flat&color=8b5cf6)](https://github.com/marco-beltrame/WinLens/stargazers)
+[![License: MIT](https://img.shields.io/github/license/marco-beltrame/WinLens?color=6E5FF2)](LICENSE)
 
-</div>
+**English** · [简体中文](README.zh-CN.md)
 
-<div align="center">
+<br/>
+
 <img src="assets/demo.gif" alt="WinLens translating on-screen text to English in place" width="860"/>
+
 </div>
 
-## Overview
+<br/>
 
-WinLens translates the text on your screen and draws the translation right over the original,
-matching the background and font so it reads as if the app had always been in your language.
-It's the Google Lens *translate* idea, but for the Windows desktop.
+<table>
+<tr>
+<td width="33%" valign="top">
 
-Browser translators only touch web pages. WinLens reads whatever is rendered on screen, so it
-also works on native apps, games, chat clients, PDFs and foreign software. It uses OCR, so the
-text doesn't need to be selectable.
+**In place**<br/>
+The translation covers the original, with the same background and a matching font. No pop-up box.
 
-It sits in the system tray and is triggered by a global hotkey. Press the hotkey, read the
-translation, press <kbd>Esc</kbd> to dismiss it.
+</td>
+<td width="33%" valign="top">
+
+**Any window**<br/>
+It reads pixels, not web pages: games, images, PDFs, installers, chats, video subtitles.
+
+</td>
+<td width="33%" valign="top">
+
+**No setup**<br/>
+Works out of the box with Google Translate. No account, no API key.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Whole sentences**<br/>
+Lines that wrap are translated as one sentence, then laid back over the same lines.
+
+</td>
+<td valign="top">
+
+**Chinese, Japanese, Korean**<br/>
+Reads CJK and Latin text on the same screen, and keeps long translations readable.
+
+</td>
+<td valign="top">
+
+**Private if you want**<br/>
+Use your own LibreTranslate server or a local AI model, and your text stays on your PC.
+
+</td>
+</tr>
+</table>
+
+## Quick start
+
+1. [Download](https://github.com/marco-beltrame/WinLens/releases/latest) `WinLens.exe` and run it. It lives in the system tray.
+2. Pick the language to translate into.
+3. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd> anywhere. Press <kbd>Esc</kbd> to close the translation.
+
+To translate only part of the screen, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> and drag a rectangle.
 
 ## Why WinLens?
 
-Browser extensions translate text *inside a web page*. They can't read anything else on your
-screen. WinLens runs OCR on the actual pixels, so it translates things they can't:
+Browser translators only work inside web pages. WinLens runs OCR on what is actually on your
+screen, so it also translates text you can't select or copy:
 
-- **Text inside images:** photos, screenshots, memes, infographics, scanned documents.
+- **Text in images:** photos, screenshots, memes, scanned documents.
 - **Games:** menus and dialogue, including imported titles.
-- **Desktop apps:** installers, error dialogs, foreign software UIs.
-- **PDFs and documents** in any reader.
-- **Video frames and subtitles.**
-- **Anything you can't select or copy.**
+- **Desktop apps:** installers, error dialogs, foreign software.
+- **PDFs and documents** in any reader, **video frames and subtitles**.
 
-If a browser tab already translates it, you don't need WinLens. For everything else on screen, you do.
-
-## Features
-
-- Translates on-screen text in place: the translation replaces the original, with a matching background and font, instead of appearing in a separate box.
-- Works on any window (apps, games, chats, documents), not just the browser.
-- A sentence that wraps over several lines is translated as one sentence, then laid back over the same lines.
-- A translation longer than the original keeps its size: it uses the free space next to the line, or a second row, before the text gets smaller.
-- Reads Latin and CJK (Chinese, Japanese, Korean) on the same screen.
-- Global hotkey, default <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>.
-- Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
-- Clean control panel that follows the Windows light or dark mode. You can change the target language straight from the overlay.
-- Right-click a block to copy the original text or the translation, or press <kbd>Ctrl</kbd> + <kbd>C</kbd> to copy the whole translation.
-- Hold <kbd>Space</kbd> to see the original text under the translation.
-- Works out of the box with Google Translate, or with your own LibreTranslate server or a local AI model (Ollama, LM Studio) so your text never leaves your PC.
-- Optional "launch at startup". Otherwise it stays out of the way in the tray.
+If a browser tab can already translate it, you don't need WinLens. For everything else on screen, you do.
 
 ## Control panel
 
-A small tray app with a control panel that follows the Windows light or dark mode. Pick the
-languages and the translation engine, set the shortcuts, and toggle launch-at-startup.
+A small tray app. The control panel follows the Windows light or dark mode: pick the languages
+and the translation engine, set the shortcuts, and turn on launch at startup.
 
 <div align="center">
 <img src="assets/settings.png" alt="WinLens control panel in dark and light mode, and the tray menu" width="860"/>
 </div>
+
+## Shortcuts
+
+| Action | How |
+| --- | --- |
+| Translate the screen | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>, tray menu, or **Translate screen** |
+| Translate a region | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>, tray menu, or **Region**, then drag |
+| Close the translation | <kbd>Esc</kbd> or the ✕ button |
+| Cancel a slow translation | <kbd>Esc</kbd> while the loading indicator shows |
+| See the original | Hold <kbd>Space</kbd> on the overlay |
+| Copy the whole translation | <kbd>Ctrl</kbd> + <kbd>C</kbd> on the overlay |
+| Copy one block | Right-click it > Copy original / Copy translation |
+| Change the target language | The overlay's top bar (re-translates live), or the control panel |
+| Change a shortcut | Control panel > click the shortcut, then press your combination |
+| Open the control panel | Double-click the tray icon, or tray menu > Settings |
 
 ## Translation engines and privacy
 
@@ -90,108 +123,79 @@ Choose the engine under **Translation engine** in the control panel.
 | **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
 | **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
 
-With LibreTranslate or a local model, nothing is sent to Google unless you turn on
-**Use Google as a backup**. **Test connection** checks the settings before you rely on them.
-API keys are encrypted for your Windows account (DPAPI) before they are saved.
-
-With the default engine, the text WinLens reads from your screen is sent to Google
-to be translated. Screenshots themselves never leave your PC.
+OCR always runs on your PC, and screenshots never leave it. Only the recognized text is sent to
+the engine you chose. With LibreTranslate or a local model nothing goes to Google unless you turn
+on **Use Google as a backup**. API keys are encrypted for your Windows account (DPAPI).
 
 ## Installation
 
-### Download
-
 Open the [Releases](https://github.com/marco-beltrame/WinLens/releases) page. Most PCs want
-`WinLens.exe`; Snapdragon / ARM devices take the `win-arm64` files. Two flavours are offered:
+`WinLens.exe`; Snapdragon / ARM devices take the `win-arm64` files.
 
 | Download | Size | Needs a runtime? |
 | --- | --- | --- |
-| `WinLens.exe` | ~25 MB | Yes — the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| `WinLens-win-x64-standalone.zip` | ~75 MB | No — the runtime is bundled |
+| `WinLens.exe` | ~25 MB | Yes, the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `WinLens-win-x64-standalone.zip` | ~75 MB | No, it is bundled. Extract it and run `WinLens.exe` inside, keeping the files together. |
 
-Pick the small `.exe` if you already have (or don't mind installing) the .NET 10 Desktop
-Runtime. Pick the standalone `.zip` if you want it to run with no install — extract the folder
-anywhere and run `WinLens.exe` inside (keep the files together; the `.exe` needs the DLLs
-next to it).
+<details>
+<summary><b>"Windows protected your PC"</b></summary>
 
-The executable isn't code-signed yet, so on first launch Windows SmartScreen may show
-"Windows protected your PC". Click **More info > Run anyway**. If you'd rather verify the
-download instead, compare its checksum against the SHA256 listed on the release page:
+<br/>
+
+The executable isn't code-signed yet, so SmartScreen may warn you on first launch. Click
+**More info > Run anyway**. To verify the download first, compare its checksum with the SHA256
+on the release page:
 
 ```powershell
 Get-FileHash .\WinLens.exe -Algorithm SHA256
 ```
 
-### OCR language packs
+</details>
 
-WinLens uses the Windows OCR engine, so it can only read languages whose OCR pack is installed.
-Most systems already have your display language. To add more (for example Chinese or Japanese):
+<details>
+<summary><b>Reading more languages (OCR packs)</b></summary>
 
-> Settings > Time & Language > Language & region > (your language) > Language options > Optional features > add the OCR feature.
+<br/>
 
-In the control panel, **Add languages…** at the bottom of the **Translate from** list opens
-that page for you. Newly installed languages show up automatically.
+WinLens uses the Windows OCR engine, so it reads the languages whose OCR pack is installed. Most
+systems already have their display language. To add another one, for example Chinese or Japanese:
 
-## Usage
+> Settings > Time & Language > Language & region > (the language) > Language options > Optional features > add the OCR feature.
 
-1. Launch WinLens. The control panel opens the first time, then it minimizes to the tray.
-2. Pick a target language in the control panel.
-3. Press the hotkey (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>) anywhere in Windows.
-4. The screen is translated in place. Press <kbd>Esc</kbd> or the ✕ button to dismiss.
+**Add languages…** at the bottom of the **Translate from** list in the control panel opens that
+page. New languages show up automatically.
 
-| Action | How |
-| --- | --- |
-| Translate the screen | Hotkey, tray menu, or **Translate screen** in the control panel |
-| Translate a region | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>, tray menu, or **Region** in the control panel, then drag |
-| Open the control panel | Double-click the tray icon, or tray menu > Settings |
-| Change target language | Control panel, or the overlay's top bar (re-translates live) |
-| Change a shortcut | Control panel > click the shortcut, then press your combination |
-| Pick the source (OCR) language | Control panel > Translate from (leave on Auto unless you need speed) |
-| Copy text | Right-click a translated block > Copy original / Copy translation |
-| Copy the whole translation | <kbd>Ctrl</kbd> + <kbd>C</kbd> on the overlay |
-| See the original | Hold <kbd>Space</kbd> on the overlay |
-| Launch at startup | Control panel toggle |
-| Quit | Tray menu > Exit |
+Leave **Translate from** on Auto: WinLens runs every installed recognizer and keeps what each one
+reads well, so a mixed-language screen still works.
 
-Leaving "Translate from" on Auto is usually best: WinLens runs every installed recognizer and
-keeps the text each one reads well, so a mixed-language screen still works. Forcing a single
-language only saves a little time.
+</details>
 
-To translate strictly line by line, as older versions did, set `"GroupParagraphs": false` in
-`%AppData%\WinLens\settings.json` and restart WinLens.
+<details>
+<summary><b>How it works</b></summary>
 
-## How it works
+<br/>
 
 ```
-Hotkey > capture screen > upscale > OCR (per script) > paragraphs > translate > overlay in place
+Shortcut > capture > upscale > OCR (per script) > paragraphs > translate > overlay in place
 ```
 
 1. Capture the monitor under the cursor, or the region you drag (DPI-accurate on mixed-scaling setups).
 2. Upscale the image about 2x so small UI text is recognized more reliably.
-3. Run every installed OCR recognizer and keep from each only the blocks whose script matches
-   it (Latin from the Latin engine, CJK from the CJK engine), then drop overlapping duplicates.
-4. Put wrapped lines back together. OCR reads line by line, so lines that continue each other
-   (same size, same spacing, a sentence still open) are joined into one paragraph. Menus, lists,
-   chat messages and anything doubtful stay separate.
-5. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
-6. Draw an opaque, color- and font-matched box over each original line. A paragraph's
-   translation is spread over the lines it came from, in one font size. A single line whose
-   translation is longer runs on over the plain background beside it, or wraps onto a second
-   or third row where there is room, before the font shrinks.
+3. Run every installed OCR recognizer and keep from each only the blocks in its own script, then drop duplicates.
+4. Join lines that continue each other into one paragraph. Menus, lists, chat messages and anything doubtful stay separate.
+5. Translate the whole screen in one request, cached for the session.
+6. Draw a colour- and font-matched box over each original line. A longer translation first uses
+   the free space beside the line or a second row, and only then a smaller font.
 
-## Roadmap
+To translate strictly line by line, as older versions did, set `"GroupParagraphs": false` in
+`%AppData%\WinLens\settings.json` and restart WinLens.
 
-The [issues](https://github.com/marco-beltrame/WinLens/issues) and
-[project board](https://github.com/marco-beltrame/WinLens/projects) have the full list.
+</details>
 
-- [ ] Offline translation (Argos / NLLB): no network, no rate limits, more privacy.
-- [ ] PaddleOCR / ONNX engine: stronger CJK and small-text accuracy, no OS language packs.
-- [ ] Cross-platform (Avalonia): macOS and Linux.
-- [x] Region capture: translate a selected area instead of the whole screen.
-- [x] LibreTranslate and local AI models (Ollama, LM Studio) as translation engines.
-- [x] Animated demo (GIF) in the README.
+<details>
+<summary><b>Building from source</b></summary>
 
-## Building from source
+<br/>
 
 ```bash
 git clone https://github.com/marco-beltrame/WinLens.git
@@ -200,28 +204,37 @@ dotnet build -c Release
 dotnet run
 ```
 
-Requirements: Windows 10 (build 19041 or later) / 11, the
-[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), and the Windows Desktop
-workload (WPF).
+Requirements: Windows 10 (build 19041 or later) or 11, the
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and the Windows Desktop workload (WPF).
 
 | Flag | Effect |
 | --- | --- |
 | `--settings` | Open the control panel on launch |
 | `--translate` | Run one capture-and-translate on launch |
 
+</details>
+
+## Roadmap
+
+- [ ] Offline translation: no network, no rate limits, more privacy.
+- [ ] Stronger OCR for CJK and small text, without Windows language packs.
+- [ ] macOS and Linux.
+- [x] Region capture.
+- [x] LibreTranslate and local AI models as translation engines.
+- [x] Light and dark mode.
+
+The [issues](https://github.com/marco-beltrame/WinLens/issues) have the full list.
+
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [Code of Conduct](CODE_OF_CONDUCT.md). Issues tagged
 [good first issue](https://github.com/marco-beltrame/WinLens/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-are a good place to start.
+are a good place to start. Found a bug? [Report it](https://github.com/marco-beltrame/WinLens/issues/new?template=bug_report.yml),
+or [suggest a feature](https://github.com/marco-beltrame/WinLens/issues/new?template=feature_request.yml).
 
-## License
+## License and acknowledgements
 
-MIT. See [LICENSE](LICENSE).
-
-## Acknowledgements
-
-- Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
-- Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
-- Built with .NET 10 and WPF.
+MIT, see [LICENSE](LICENSE). Translation through the Google Translate endpoint with a
+[MyMemory](https://mymemory.translated.net/) fallback; tray integration with
+[Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon); built with .NET 10 and WPF.
