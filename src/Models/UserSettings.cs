@@ -19,6 +19,9 @@ public sealed class UserSettings
     /// </summary>
     public bool GroupParagraphs { get; set; } = true;
 
+    /// <summary>"system" (follow the Windows app mode), "light" or "dark".</summary>
+    public string Theme { get; set; } = "system";
+
     /// <summary>Most-recently-used target language codes, most recent first (experimental).</summary>
     public System.Collections.Generic.List<string> RecentLanguages { get; set; } = new();
 

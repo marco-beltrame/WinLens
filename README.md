@@ -91,8 +91,8 @@ If a browser tab can already translate it, you don't need WinLens. For everythin
 
 ## Control panel
 
-A small tray app. The control panel follows the Windows light or dark mode: pick the languages
-and the translation engine, set the shortcuts, and turn on launch at startup.
+A small tray app. The control panel follows the Windows light or dark mode, or the one you pick under **Theme**:
+choose the languages and the translation engine, set the shortcuts, and turn on launch at startup.
 
 <div align="center">
 <img src="assets/settings.png" alt="WinLens control panel in dark and light mode, and the tray menu" width="860"/>

@@ -23,6 +23,7 @@ All notable changes to this project are documented here. The format is based on
 - A new look across the app: cleaner control panel, tray menu, overlay bar and loading
   indicator, with a single accent colour and simple line icons.
 - WinLens follows the Windows light or dark mode, and switches as soon as Windows does.
+  **Theme** in the control panel can also keep it always light or always dark.
 - The tray menu shows the current shortcuts next to **Translate screen** and
   **Translate region**; **Open WinLens** is now **Settings**.
 - The control panel has a **Region** button next to **Translate screen**, and shows each

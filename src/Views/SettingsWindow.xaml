@@ -348,9 +348,25 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Launch at startup -->
+                        <!-- Theme and launch at startup -->
                         <Border Style="{StaticResource Card}" Margin="0">
                             <StackPanel>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Theme" Style="{StaticResource RowLabel}"/>
+                                    <ComboBox x:Name="ThemeCombo" Grid.Column="1" Width="208"
+                                              Style="{StaticResource ModernComboBox}"
+                                              SelectionChanged="OnThemeChanged"
+                                              AutomationProperties.Name="Theme">
+                                        <ComboBoxItem Tag="system" Content="System"/>
+                                        <ComboBoxItem Tag="light" Content="Light"/>
+                                        <ComboBoxItem Tag="dark" Content="Dark"/>
+                                    </ComboBox>
+                                </Grid>
+                                <Border Style="{StaticResource RowLine}"/>
                                 <Grid Style="{StaticResource Row}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>

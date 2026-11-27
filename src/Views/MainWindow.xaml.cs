@@ -43,6 +43,7 @@ public partial class MainWindow : Window, IDisposable
     {
         InitializeComponent();
         _settings.Load();
+        WinLens.Theme.ThemeManager.SetPreference(_settings.Current.Theme);
         _translator.Configure(_settings.Current.ToEngineOptions());
         Loaded += OnLoaded;
     }

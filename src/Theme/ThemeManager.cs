@@ -21,10 +21,25 @@ internal static class ThemeManager
     // App.xaml starts on the dark palette.
     private static bool _light;
 
-    /// <summary>Loads the palette matching Windows, if it is not the one already in use.</summary>
+    // "light" or "dark" pins the palette; anything else follows Windows.
+    private static string _preference = "system";
+
+    /// <summary>Sets the user's choice ("system", "light" or "dark") and applies it.</summary>
+    public static void SetPreference(string? preference)
+    {
+        _preference = preference ?? "system";
+        Apply();
+    }
+
+    /// <summary>Loads the palette for the user's choice, if it is not the one already in use.</summary>
     public static void Apply()
     {
-        bool light = WindowsUsesLightApps();
+        bool light = _preference switch
+        {
+            "light" => true,
+            "dark" => false,
+            _ => WindowsUsesLightApps(),
+        };
         if (light == _light) return;
 
         var app = Application.Current;

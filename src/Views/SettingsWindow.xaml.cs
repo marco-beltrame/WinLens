@@ -103,6 +103,7 @@ public partial class SettingsWindow : Window
         UpdateHotkeyText();
         UpdateRegionHotkeyText();
         LoadEngineUi();
+        LoadThemeUi();
 
         _suppressEvents = false;
 
@@ -586,6 +587,26 @@ public partial class SettingsWindow : Window
     private void UpdateRegionHotkeyText() =>
         RegionHotkeyKeys.ItemsSource = HotkeyText.Parts(
             _settings.Current.RegionHotkeyModifiers, _settings.Current.RegionHotkeyKey);
+
+    // ---------------- Theme ----------------
+
+    private void LoadThemeUi()
+    {
+        var theme = _settings.Current.Theme;
+        ThemeCombo.SelectedIndex = 0;
+        foreach (ComboBoxItem item in ThemeCombo.Items)
+            if (item.Tag as string == theme)
+                ThemeCombo.SelectedItem = item;
+    }
+
+    private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressEvents) return;
+        var theme = (ThemeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "system";
+        _settings.Current.Theme = theme;
+        _settings.Save(_settings.Current);
+        WinLens.Theme.ThemeManager.SetPreference(theme);
+    }
 
     // ---------------- Startup ----------------
 
