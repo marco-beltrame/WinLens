@@ -16,7 +16,7 @@ public class ParagraphGrouperTests
 
     private const string Chinese =
         "这个应用可以翻译屏幕上的任何文字，不管它是在游戏里还是在图片里，只要按下快捷键就可以看到翻译结果，" +
-        "而且翻译会直接显示在原来的位置上";
+        "而且翻译会直接显示在原来的位置上。";
 
     private static string[] Texts(IEnumerable<OcrParagraph> paragraphs) =>
         paragraphs.Select(p => p.Text).ToArray();
@@ -333,6 +333,307 @@ public class ParagraphGrouperTests
         screen.Rows(items, x: 30, y: 30, pitch: 1.9, lang: "zh-Hans-CN");
 
         Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    // ------------------------------------------------------------------ lists that look like text
+
+    [Fact]
+    public void ChineseMenu_WithItemsOfSimilarLength_StaysApart()
+    {
+        // Every item is about as wide as the widest, so each looks like a full line.
+        var items = new[] { "在新窗口中打开", "固定到快速访问", "授予访问权限", "还原以前的版本", "包含到库中", "发送到" };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 30, y: 30, em: 12, pitch: 1.9, lang: "zh-Hans-CN");
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void JapaneseMenu_StaysApart()
+    {
+        var items = new[] { "新しいウィンドウで開く", "クイックアクセスにピン留め", "以前のバージョンの復元", "ライブラリに追加", "送る" };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 30, y: 30, em: 12, pitch: 1.9, lang: "ja-JP");
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void ChineseHeadlines_OfTheSameLength_StayApart()
+    {
+        // News sites write their headlines to fill the column. Some have a comma in them.
+        var items = new[]
+        {
+            "新款手机下月发布，价格曝光引关注",
+            "全国大部分地区将迎来降温天气",
+            "世界杯预选赛今晚开战球迷期待",
+            "专家建议每天步行三十分钟以上",
+        };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 30, y: 30, em: 14, pitch: 1.9, lang: "zh-Hans-CN");
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void ChineseHeadline_WrappedOnItsOwn_IsJoined()
+    {
+        var screen = new ScreenText();
+        var wrapped = screen.Paragraph("新一代高速列车开始试运行，最高时速可达四百五十公里",
+            x: 30, y: 30, width: 260, lineHeight: 1.5, lang: "zh-Hans-CN");
+        Assert.Equal(2, wrapped.Count);
+        // The next headline sits further down than the lines of this one.
+        screen.Add("多地发布寒潮预警", 30, 30 + 4 * 16, lang: "zh-Hans-CN");
+
+        Assert.Equal(new[] { "新一代高速列车开始试运行，最高时速可达四百五十公里", "多地发布寒潮预警" },
+            Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void ArabicMenu_StaysApart()
+    {
+        var items = new[] { "فتح في نافذة جديدة", "تثبيت في الوصول السريع", "استعادة الإصدارات السابقة", "إضافة إلى المكتبة الآن" };
+
+        Assert.Equal(items, Texts(ParagraphGrouper.Group(RightAligned(items, em: 14, pitch: 1.9))));
+    }
+
+    [Fact]
+    public void ArabicParagraph_IsJoinedAndRightAligned()
+    {
+        // The first two lines are nearly the same width, so their middles line up as well
+        // as their right edges do.
+        var lines = RightAligned(new[]
+        {
+            "هذا النص العربي يلتف على عدة أسطر في",
+            "الفقرة الواحدة ويجب أن يترجم كله معا",
+            "بدون أي انقطاع هنا.",
+        }, em: 16, pitch: 1.5, widths: new[] { 300.0, 292.0, 150.0 });
+
+        var paragraph = Assert.Single(ParagraphGrouper.Group(lines));
+        Assert.Equal(ParagraphAlignment.Right, paragraph.Alignment);
+    }
+
+    private static List<OcrLine> RightAligned(string[] texts, double em, double pitch, double[]? widths = null)
+    {
+        const double right = 500;
+        return texts.Select((t, i) =>
+        {
+            double w = widths?[i] ?? t.Length * 0.45 * em;
+            return new OcrLine(t, new OcrRect(right - w, 40 + i * pitch * em, w, 0.92 * em), "ar");
+        }).ToList();
+    }
+
+    [Fact]
+    public void LowercaseChat_WithoutAWrappedMessage_StaysApart()
+    {
+        // The longest message is as wide as the column gets, which is all a full line is.
+        // The short ones around it show that these are messages.
+        var items = new[] { "ok", "so what time do we meet tomorrow", "around noon i guess", "cool see you then" };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 80, y: 100, pitch: 1.4);
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void QuestionAndAnswer_InLowercase_StayApart()
+    {
+        var screen = new ScreenText();
+        screen.Rows(new[] { "did you see what he just did?", "yeah that was insane" }, x: 80, y: 100, pitch: 1.4);
+
+        Assert.Equal(2, Group(screen).Count);
+    }
+
+    [Fact]
+    public void ChatWithNames_KeepsMessagesApart_AndJoinsTheWrappedOne()
+    {
+        // A stream chat: 13 px text in a 300 px column, messages only a little further
+        // apart than the lines of one message.
+        var messages = new[]
+        {
+            "moobot: please keep the chat friendly and respectful to everyone who is here today",
+            "pogchamp_lover: that clutch was insane",
+            "streamelements: thanks for the follow",
+            "kappa123: LUL",
+        };
+        var screen = new ScreenText();
+        double y = 10;
+        foreach (var message in messages)
+        {
+            var wrapped = screen.Paragraph(message, x: 10, y: y, width: 300, em: 13, lineHeight: 1.23);
+            y += wrapped.Count * 1.23 * 13 + 0.62 * 13;
+        }
+
+        Assert.Equal(messages, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void LogLines_StayApart()
+    {
+        var items = new[]
+        {
+            "fa32d37 feat: translate wrapped lines as one paragraph",
+            "8c55774 fix: keep the overlay on the right monitor",
+            "b1e09aa docs: explain the settings file",
+            "d4c2f10 chore: bump the test sdk",
+        };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 10, y: 10, em: 14, pitch: 1.3);
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Theory]
+    // Configuration: the two longest lines are as wide as the block.
+    [InlineData("url = \"postgres://backup@db.internal:5432/app\"|schedule = \"0 3 * * *\" # every night at 03:00|bucket = \"acme-backups\"|retention_days = 30")]
+    // A script without semicolons or braces.
+    [InlineData("total = compute(first, second)|result = total * factor|print(result)|save(result, path)")]
+    [InlineData("cd src/app|npm install --save-dev typescript|npm run build|git status")]
+    [InlineData("\"name\": \"winlens\",|\"description\": \"reads the text on your screen\",|\"license\": \"MIT\"")]
+    public void CodeAndConfiguration_StayApart(string block)
+    {
+        var items = block.Split('|');
+        var screen = new ScreenText();
+        screen.Rows(items, x: 30, y: 30, em: 14, pitch: 1.4);
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void SentenceThatNamesCode_IsStillJoined()
+    {
+        var screen = new ScreenText();
+        screen.Rows(new[]
+        {
+            "Call render() again after every change, or set needs_redraw and",
+            "wait for the next frame to pick it up.",
+        }, x: 50, y: 50, pitch: 1.4);
+
+        Assert.Single(Group(screen));
+    }
+
+    [Theory]
+    [InlineData(14)]
+    [InlineData(16)]
+    public void TitleOverItsSubtitle_StaysApart(double subtitleSize)
+    {
+        // Two lines on their own, the first as wide as the second: nothing here says
+        // "wrapped" except that, and a card or a notification looks the same.
+        var screen = new ScreenText();
+        screen.Add("Your package has been shipped today", 40, 40, em: 16);
+        screen.Add("Track it with the link in the email", 40, 40 + 1.4 * 16, em: subtitleSize);
+
+        Assert.Equal(2, Group(screen).Count);
+    }
+
+    [Fact]
+    public void ListOfCapitalisedEntries_KeepsAWrappedOneTogether()
+    {
+        // Objectives in a quest log: entries start with a capital, so the line that does
+        // not is the rest of the one above, short lines around it or not.
+        var screen = new ScreenText();
+        screen.Rows(new[]
+        {
+            "Find the missing lens in the flooded cellar",
+            "beneath the old customs house",
+            "Speak to Captain Ines at the harbour",
+            "Light the beacon",
+        }, x: 40, y: 40, em: 14, pitch: 1.5);
+
+        Assert.Equal(new[]
+        {
+            "Find the missing lens in the flooded cellar beneath the old customs house",
+            "Speak to Captain Ines at the harbour",
+            "Light the beacon",
+        }, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void OptionsOfSimilarLength_StayApart()
+    {
+        // Most of these are within a word of the widest, and several follow each other.
+        var items = new[]
+        {
+            "Display file size information in folder tips",
+            "Display the full path in the title bar",
+            "Hide empty drives",
+            "Hide extensions for all known file types",
+            "Launch folder windows in a separate process",
+            "Restore previous folder windows at logon",
+            "Show encrypted or compressed NTFS files in color",
+            "Show pop-up description for folder and desktop items",
+            "Show preview handlers in preview pane",
+        };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 40, y: 40, em: 12, pitch: 1.45);
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void TableOfContents_InTitleCase_StaysApart()
+    {
+        var items = new[]
+        {
+            "Getting Started With The Overlay",
+            "Choosing Where The Text Comes From",
+            "Picking The Translation Engine",
+            "Running Your Own Model At Home",
+        };
+        var screen = new ScreenText();
+        screen.Rows(items, x: 30, y: 30, pitch: 1.5);
+
+        Assert.Equal(items, Texts(Group(screen)));
+    }
+
+    [Fact]
+    public void ParagraphBesideAPicture_IsJoined_ThoughTheTextBelowIsWider()
+    {
+        // Text flowing around an infobox: the same column is narrower up here.
+        const string second =
+            "It was discovered in 1930 and was at once hailed as the ninth planet, but its " +
+            "status was questioned for decades as more objects of its kind were found beyond it.";
+        var screen = new ScreenText();
+        var narrow = screen.Paragraph(Prose, x: 100, y: 100, width: 330);
+        var wide = screen.Paragraph(second, x: 100, y: 100 + narrow.Count * 22.4 + 12, width: 680);
+        Assert.True(narrow.Count >= 4 && wide.Count >= 2);
+
+        Assert.Equal(new[] { Prose, second }, Texts(Group(screen)));
+    }
+
+    // ------------------------------------------------------------------ joining the text
+
+    [Theory]
+    [InlineData("typeset with hyphen-", "ation switched on", "typeset with hyphenation switched on")]
+    [InlineData("Die Vor-", "und Nachteile sind klar", "Die Vor- und Nachteile sind klar")]
+    [InlineData("pre-", "and post-war housing", "pre- and post-war housing")]
+    [InlineData("Er lebt in Rheinland-", "Pfalz und arbeitet dort", "Er lebt in Rheinland-Pfalz und arbeitet dort")]
+    [InlineData("the result -", "as expected", "the result - as expected")]
+    [InlineData("ภาษาไทยไม่มีช่องว่าง", "ระหว่างคำ", "ภาษาไทยไม่มีช่องว่างระหว่างคำ")]
+    [InlineData("翻译会直接显示", "在原来的位置上", "翻译会直接显示在原来的位置上")]
+    public void JoinLines_PutsTheSentenceBackTogether(string first, string second, string expected) =>
+        Assert.Equal(expected, ParagraphGrouper.JoinLines(new[]
+        {
+            new OcrLine(first, default, null), new OcrLine(second, default, null),
+        }));
+
+    [Fact]
+    public void ManyLines_AreGroupedTheSameAsFew()
+    {
+        // The search for the line below only looks nearby; the answer must not depend on
+        // how much else is on the screen.
+        var one = new ScreenText();
+        one.Paragraph(Prose, x: 100, y: 100, width: 420);
+        var expected = Texts(Group(one));
+
+        var many = new ScreenText();
+        for (int column = 0; column < 4; column++)
+            for (int block = 0; block < 60; block++)
+                many.Paragraph(Prose, x: 100 + column * 500, y: 100 + block * 160, width: 420);
+
+        var grouped = Texts(Group(many));
+        Assert.Equal(240, grouped.Length);
+        Assert.All(grouped, text => Assert.Equal(expected[0], text));
     }
 
     [Fact]

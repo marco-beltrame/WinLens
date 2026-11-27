@@ -415,7 +415,7 @@ public partial class MainWindow : Window, IDisposable
     /// </summary>
     private void WarnIfNothingChanged(System.Collections.Generic.List<OcrBlock> blocks, string target)
     {
-        if (blocks.Count < 4) return;
+        if (blocks.Sum(b => Math.Max(1, b.LineRects.Count)) < 4) return;
         if (blocks.Any(b => !string.Equals(b.TranslatedText, b.OriginalText, StringComparison.Ordinal)))
             return;
 

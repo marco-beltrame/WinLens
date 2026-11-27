@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using WinLens.Services;
 
 namespace WinLens.Layout;
 
@@ -137,6 +138,43 @@ public static class ParagraphLayout
     }
 
     /// <summary>
+    /// How far each line of a paragraph may reach sideways: to the paragraph's own edges,
+    /// or up to other text on the same row (the time next to the last line of a chat
+    /// message, a button after a label), whichever comes first. A translation longer than
+    /// the original uses the empty end of a short line, and must not run under that.
+    /// </summary>
+    /// <param name="lines">The paragraph's lines.</param>
+    /// <param name="others">Every other piece of text on screen.</param>
+    /// <param name="gap">Space to keep clear before the other text.</param>
+    public static (double Left, double Right)[] Reach(
+        IReadOnlyList<OcrRect> lines, IEnumerable<OcrRect> others, double gap)
+    {
+        double left = lines.Min(l => l.X), right = lines.Max(l => l.X + l.Width);
+        var reach = new (double Left, double Right)[lines.Count];
+        Array.Fill(reach, (left, right));
+
+        foreach (var o in others)
+        {
+            double oRight = o.X + o.Width, oBottom = o.Y + o.Height;
+            if (oRight <= left || o.X >= right) continue;
+
+            for (int k = 0; k < reach.Length; k++)
+            {
+                var l = lines[k];
+                double shared = Math.Min(l.Y + l.Height, oBottom) - Math.Max(l.Y, o.Y);
+                if (shared < 0.5 * Math.Min(l.Height, o.Height)) continue; // not on this row
+
+                double lineRight = l.X + l.Width;
+                if (o.X >= lineRight)
+                    reach[k].Right = Math.Min(reach[k].Right, Math.Max(lineRight, o.X - gap));
+                else if (oRight <= l.X)
+                    reach[k].Left = Math.Max(reach[k].Left, Math.Min(l.X, oRight + gap));
+            }
+        }
+        return reach;
+    }
+
+    /// <summary>
     /// Greedy fill. A line takes tokens while they stay within its soft limit; the first
     /// token of a line only has to respect the hard limit, so a word longer than the
     /// line's share still gets a line of its own.
@@ -220,6 +258,7 @@ public static class ParagraphLayout
         var current = new StringBuilder();
         bool spaceBefore = false;      // whitespace seen before the token being built
         bool pendingSpace = false;     // whitespace seen since the last character
+        bool pendingBreak = false;     // a zero-width space seen since the last character
         bool lastBreakable = false;    // the token ends in a character a line may break after
         bool lastOpens = false;        // the token ends in opening punctuation
 
@@ -239,11 +278,19 @@ public static class ParagraphLayout
                 pendingSpace = true;
                 continue;
             }
+            if (element == "\u200B")
+            {
+                // Khmer and Myanmar text marks its word boundaries with these.
+                pendingBreak = true;
+                continue;
+            }
 
-            var rune = Rune.GetRuneAt(element, 0);
+            // Not GetRuneAt: OCR and translators do hand back the odd unpaired surrogate.
+            Rune.DecodeFromUtf16(element, out var rune, out _);
             bool breakable = IsBreakable(rune);
+            bool mayBreak = pendingBreak || breakable || lastBreakable || StartsSyllable(rune);
             bool glued = current.Length > 0 && !pendingSpace &&
-                (IsCloser(rune) || lastOpens || (!breakable && !lastBreakable));
+                (IsCloser(rune) || lastOpens || !mayBreak);
             if (!glued)
             {
                 Flush();
@@ -251,14 +298,15 @@ public static class ParagraphLayout
             }
             current.Append(element);
             pendingSpace = false;
-            lastBreakable = breakable;
+            pendingBreak = false;
+            lastBreakable = breakable || EndsSyllable(element[^1]);
             lastOpens = IsOpener(rune);
         }
         Flush();
         return tokens;
     }
 
-    /// <summary>Characters of scripts that put no space between words.</summary>
+    /// <summary>Characters a line may break before and after: Chinese and Japanese.</summary>
     private static bool IsBreakable(Rune r)
     {
         int c = r.Value;
@@ -269,11 +317,18 @@ public static class ParagraphLayout
             || c >= 0x3040 && c <= 0x30FF      // kana
             || c >= 0x31F0 && c <= 0x31FF
             || c >= 0x3000 && c <= 0x303F      // CJK punctuation
-            || c >= 0xFF00 && c <= 0xFFEF      // full-width forms
-            || c >= 0x0E00 && c <= 0x0EFF      // Thai, Lao
-            || c >= 0x1000 && c <= 0x109F      // Myanmar
-            || c >= 0x1780 && c <= 0x17FF;     // Khmer
+            || c >= 0xFF00 && c <= 0xFFEF;     // full-width forms
     }
+
+    // Thai and Lao put no space between words either, but finding the words takes a
+    // dictionary. Without one a line is only broken where a syllable certainly starts
+    // (before a vowel written ahead of its consonant) or ends (after one that closes it),
+    // never inside one. Khmer and Myanmar break at their spaces and zero-width spaces.
+    private static bool StartsSyllable(Rune r) =>
+        r.Value is >= 0x0E40 and <= 0x0E44 or >= 0x0EC0 and <= 0x0EC4;
+
+    private static bool EndsSyllable(char c) =>
+        c is '\u0E30' or '\u0E33' or '\u0E46' or '\u0E2F' or '\u0EB0' or '\u0EB3' or '\u0EC6' or '\u0EAF';
 
     private const string Closers = "、。，．・：；！？）］｝〉》」』】〕〗〙〛’”ー々,.!?:;)]}%";
     private const string Openers = "（［｛〈《「『【〔〖〘〚‘“([{";

@@ -258,8 +258,11 @@ public partial class OverlayWindow : Window
     /// <summary>One line of a block on screen: the fill that hides the original and the text over it.</summary>
     private sealed record LineBox(Border Border, TextBox Text, Rect Slot);
 
-    /// <summary>The boxes of one block. A single line has one; a paragraph one per original line.</summary>
-    private sealed record BlockBoxes(LineBox[] Lines, ParagraphAlignment Alignment, double FontSize);
+    /// <summary>
+    /// The boxes of one block. A single line has one; a paragraph one per original line,
+    /// with how wide the text of each may become.
+    /// </summary>
+    private sealed record BlockBoxes(LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities);
 
     private void BuildOverlayBoxes()
     {
@@ -271,10 +274,18 @@ public partial class OverlayWindow : Window
         // block, on the UI thread, was a visible stall before the overlay faded in.
         using var pixels = new PixelReader(_screenshot);
 
-        foreach (var block in _blocks)
+        // Where every line goes, before any is drawn: a paragraph has to know what else
+        // sits on its rows.
+        var lineRectsOf = _blocks
+            .Select(b => b.LineRects.Count > 0 ? b.LineRects : new[] { b.BoundingRect })
+            .ToArray();
+        var slotsOf = lineRectsOf.Select(Slots).ToArray();
+
+        for (int i = 0; i < _blocks.Count; i++)
         {
-            var lineRects = block.LineRects.Count > 0 ? block.LineRects : new[] { block.BoundingRect };
-            var slots = Slots(lineRects);
+            var block = _blocks[i];
+            var lineRects = lineRectsOf[i];
+            var slots = slotsOf[i];
             var menu = BuildContextMenu(block);
 
             var lines = new LineBox[slots.Length];
@@ -284,8 +295,16 @@ public partial class OverlayWindow : Window
                 lines[k] = AddLineBox(slots[k], bg, fg, menu);
             }
 
+            double[] capacities = Array.Empty<double>();
+            if (slots.Length > 1)
+            {
+                var others = slotsOf.Where((_, j) => j != i).SelectMany(o => o).Select(ToOcrRect);
+                capacities = Capacities(slots, block.Alignment,
+                    ParagraphLayout.Reach(slots.Select(ToOcrRect).ToArray(), others, slots.Min(r => r.Height) * 0.5));
+            }
+
             var boxes = new BlockBoxes(lines, block.Alignment,
-                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight));
+                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities);
             _boxes[block] = boxes;
             ApplyText(boxes, block.TranslatedText ?? "");
         }
@@ -314,6 +333,23 @@ public partial class OverlayWindow : Window
             slots[k] = new Rect(slots[k].X, top, slots[k].Width, bottom - top);
         }
         return slots;
+    }
+
+    private static OcrRect ToOcrRect(Rect r) => new(r.X, r.Y, r.Width, r.Height);
+
+    /// <summary>
+    /// How wide the text of each line of a paragraph may become: from where the line starts
+    /// to as far as it may reach. Two DIPs less, the breathing room single lines get too.
+    /// </summary>
+    private static double[] Capacities(Rect[] slots, ParagraphAlignment alignment, (double Left, double Right)[] reach)
+    {
+        double mid = (slots.Min(r => r.Left) + slots.Max(r => r.Right)) / 2;
+        return slots.Select((slot, k) => alignment switch
+        {
+            ParagraphAlignment.Center => 2 * Math.Min(mid - reach[k].Left, reach[k].Right - mid),
+            ParagraphAlignment.Right => slot.Right - reach[k].Left,
+            _ => reach[k].Right - slot.Left,
+        } - 2).ToArray();
     }
 
     private LineBox AddLineBox(Rect slot, Color bg, Color fg, ContextMenu menu)
@@ -392,15 +428,7 @@ public partial class OverlayWindow : Window
     {
         var lines = boxes.Lines;
         double left = lines.Min(l => l.Slot.Left), right = lines.Max(l => l.Slot.Right);
-
-        // How far each line may reach: to the paragraph's edge, from wherever it starts.
-        // Two DIPs less, the breathing room single lines get too.
-        var capacities = lines.Select(l => boxes.Alignment switch
-        {
-            ParagraphAlignment.Center => right - left,
-            ParagraphAlignment.Right => l.Slot.Right - left,
-            _ => right - l.Slot.Left,
-        } - 2).ToArray();
+        var capacities = boxes.Capacities;
         var shares = lines.Select(l => l.Slot.Width).ToArray();
 
         var fit = ParagraphLayout.Flow(text, capacities, shares,
@@ -413,7 +441,8 @@ public partial class OverlayWindow : Window
             string line = fit.Lines[k];
             double size = fontSize;
             double width = line.Length == 0 ? 0 : MeasureWidth(line, size);
-            if (width > capacities[k])
+            // Flow added up word widths; the line measured whole can differ by a hair.
+            if (width > capacities[k] + 0.5)
             {
                 // Only when the text could not be made to fit (one very long word): this
                 // line alone shrinks further.

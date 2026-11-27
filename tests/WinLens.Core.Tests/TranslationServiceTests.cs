@@ -99,13 +99,39 @@ public class TranslationServiceTests
     }
 
     [Fact]
-    public async Task TextOver500Chars_SkipsMyMemory()
+    public async Task TextOverTheMyMemoryLimit_IsSentASentenceAtATime()
     {
-        var h = new FakeHandler(r => Json("", HttpStatusCode.InternalServerError));
+        // A paragraph, now that wrapped lines are translated together, is easily longer
+        // than the 500 bytes MyMemory takes in one query.
+        string sentence = "The translator works best when it can read a whole sentence at once, " +
+                          "because the meaning of a word depends on what follows it.";
+        string text = string.Join(" ", Enumerable.Repeat(sentence, 6));
+        var h = new FakeHandler(r => IsGoogle(r)
+            ? Json("", HttpStatusCode.TooManyRequests)
+            : Json("""{"responseStatus":200,"responseData":{"translatedText":"Tradotto."}}"""));
         using var svc = Make(h);
-        var text = new string('a', 501);
+
+        Assert.Equal("Tradotto. Tradotto.", await svc.TranslateAsync(text, "it"));
+
+        var queries = h.Requests.Where(r => !IsGoogle(r))
+            .Select(r => System.Web.HttpUtility.ParseQueryString(r.RequestUri!.Query)["q"]!).ToArray();
+        Assert.Equal(2, queries.Length);
+        Assert.All(queries, q => Assert.True(Encoding.UTF8.GetByteCount(q) <= 500));
+        Assert.All(queries, q => Assert.EndsWith("follows it.", q));
+        Assert.Equal(text, string.Join(" ", queries));
+    }
+
+    [Fact]
+    public async Task TextOverTheMyMemoryLimit_StaysWhole_WhenAPieceFails()
+    {
+        int calls = 0;
+        var h = new FakeHandler(r => IsGoogle(r) || Interlocked.Increment(ref calls) > 1
+            ? Json("", HttpStatusCode.InternalServerError)
+            : Json("""{"responseStatus":200,"responseData":{"translatedText":"Tradotto."}}"""));
+        using var svc = Make(h);
+        var text = string.Join(" ", Enumerable.Repeat("This sentence is here to fill the query up.", 20));
+
         Assert.Equal(text, await svc.TranslateAsync(text, "it"));
-        Assert.Equal(0, h.Count("mymemory"));
     }
 
     [Fact]
