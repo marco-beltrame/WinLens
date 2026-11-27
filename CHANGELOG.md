@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format is based on
 - On the overlay, <kbd>Ctrl</kbd> + <kbd>C</kbd> copies the whole translation, top to bottom.
 - Hold <kbd>Space</kbd> on the overlay to see the original text; release it to bring the
   translation back.
+- Press <kbd>Esc</kbd> while the spinner shows to cancel a translation that is taking too long.
 
 ### Changed
 - A sentence that wraps over several lines is now translated as one sentence instead of line
@@ -23,6 +24,11 @@ All notable changes to this project are documented here. The format is based on
 ### Fixed
 - The box behind a translation takes the exact colour of a flat background, so it no longer
   shows as a slightly lighter or darker patch next to other text or near the edge of a card.
+- Small text at 125 % and 150 % display scaling no longer loses the bottoms of letters like g, p and y.
+- Chinese and Japanese text no longer gets stray spaces between characters from Windows OCR (#39).
+- The app stays responsive while it reads a large screen, and an error while showing the
+  overlay closes the overlay instead of the whole app (#36).
+- Fewer wasted retries and wrong results with LibreTranslate, the local model and MyMemory (#35).
 
 ## [1.3.0] - 2026-10-14
 
