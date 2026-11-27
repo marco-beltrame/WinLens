@@ -79,6 +79,12 @@ public partial class SettingsWindow : Window
         MaxHeight = SystemParameters.WorkArea.Height + 2 * ShadowMargin;
         SourceInitialized += (_, _) => FitToWorkArea();
         SizeChanged += (_, _) => FitToWorkArea();
+        // Windows centres the window on the monitor under the pointer only after those two,
+        // and that monitor may be a smaller one.
+        Loaded += (_, _) => FitToWorkArea();
+        // Dragged onto a monitor with another scaling: only the cap, once WPF has switched
+        // over. Moving the window here would pull it out of the user's hand.
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(new Action(() => FitToWorkArea(reposition: false)));
 
         _settings = settings;
         _onTranslate = onTranslate;
@@ -121,6 +127,7 @@ public partial class SettingsWindow : Window
     private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.NewValue is not true) { EndCaptureIfActive(); CommitEngineFields(); return; }
+        FitToWorkArea(); // the monitors may have changed while the window was hidden
         _suppressEvents = true;
         RebuildLanguageOptions(); // float most-recent targets to the top
         BuildSourceOptions();
@@ -147,10 +154,10 @@ public partial class SettingsWindow : Window
     /// <summary>
     /// Caps the height at the monitor the window is on, and moves the window up when
     /// growing (a custom engine shows more rows) would push its lower edge off that
-    /// monitor. Worked out in physical pixels: WPF's own Top/Left are unreliable across
-    /// monitors with different scaling.
+    /// monitor, but never so far that the title bar leaves it. Worked out in physical
+    /// pixels: WPF's own Top/Left are unreliable across monitors with different scaling.
     /// </summary>
-    private void FitToWorkArea()
+    private void FitToWorkArea(bool reposition = true)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero || WindowState != WindowState.Normal) return;
@@ -164,12 +171,13 @@ public partial class SettingsWindow : Window
         // The shadow margin may hang over the edge; the visible part may not.
         double maxHeight = work.Height / scale + 2 * ShadowMargin;
         if (Math.Abs(MaxHeight - maxHeight) > 0.5) MaxHeight = maxHeight;
+        if (!reposition) return;
 
         // Layout knows the new height before the HWND has caught up; take the larger.
         int bottom = Math.Max(bounds.Bottom, bounds.Top + (int)Math.Round(ActualHeight * scale));
         int overflow = bottom - shadow - work.Bottom;
-        if (overflow <= 0) return;
-        int top = Math.Max(work.Top - shadow, bounds.Top - overflow);
+        int top = overflow > 0 ? bounds.Top - overflow : bounds.Top;
+        top = Math.Max(work.Top - shadow, top);
         if (top != bounds.Top) WindowPlacement.MoveTo(hwnd, bounds.Left, top);
     }
 

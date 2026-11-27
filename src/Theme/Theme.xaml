@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- Colours live in Palette.Dark.xaml / Palette.Light.xaml and are read here through
          DynamicResource, so the whole app follows the Windows light/dark setting, live. -->
@@ -190,7 +191,6 @@
     <Style x:Key="TitleBarButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
         <Setter Property="Width" Value="34"/>
         <Setter Property="Height" Value="28"/>
-        <Setter Property="IsTabStop" Value="False"/>
     </Style>
 
     <!-- Same shape; red under the pointer, as on every Windows title bar. -->
@@ -255,8 +255,6 @@
     <Style x:Key="ScrollBarThumb" TargetType="Thumb">
         <Setter Property="Focusable" Value="False"/>
         <Setter Property="IsTabStop" Value="False"/>
-        <Setter Property="MinHeight" Value="24"/>
-        <Setter Property="MinWidth" Value="24"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
@@ -280,9 +278,17 @@
 
     <!-- Thin, arrowless scroll bars everywhere, dropdown lists included. -->
     <Style TargetType="ScrollBar">
+        <Style.Resources>
+            <!-- The track never makes the thumb shorter than half of these. A minimum size on
+                 the thumb itself would also apply across the bar and get clipped. -->
+            <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">48</sys:Double>
+            <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">48</sys:Double>
+        </Style.Resources>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Width" Value="10"/>
         <Setter Property="MinWidth" Value="10"/>
+        <!-- No "Scroll here / Top / Bottom" menu on right-click: it keeps the system look. -->
+        <Setter Property="ContextMenu" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
@@ -422,8 +428,11 @@
          separators, which a MenuItem style cannot be applied to. -->
     <Style TargetType="MenuItem" BasedOn="{StaticResource ModernMenuItem}"/>
 
-    <!-- Tray menu and right-click menus. The margin is room for the shadow. -->
+    <!-- Tray menu and right-click menus. The margin is room for the shadow. It is on the menu
+         itself, not inside its template: WPF leaves a popup child's own margin out when it
+         places it, so the menu's corner is at the pointer. -->
     <Style x:Key="ModernContextMenu" TargetType="ContextMenu">
+        <Setter Property="Margin" Value="12,8,12,16"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="13"/>
@@ -432,7 +441,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContextMenu">
-                    <Grid Margin="12,8,12,16">
+                    <Grid>
                         <Border CornerRadius="10" Background="{DynamicResource PopupBrush}">
                             <Border.Effect>
                                 <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Direction="270"

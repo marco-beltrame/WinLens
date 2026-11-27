@@ -107,7 +107,9 @@
                 </Grid.RowDefinitions>
 
                 <!-- ============== Title bar ============== -->
+                <!-- Tab reaches Minimize and Close after the settings, not before them. -->
                 <Grid x:Name="TitleBar" Grid.Row="0" Height="44" Background="Transparent"
+                      KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="2"
                       MouseLeftButtonDown="OnTitleBarDrag">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0"
                                 IsHitTestVisible="False">
@@ -136,7 +138,8 @@
                 <!-- ============== Content ============== -->
                 <!-- Scrolls, so the window still works where the full list is taller than
                      the screen (a custom engine on a small laptop display). -->
-                <ScrollViewer x:Name="ContentScroll" Grid.Row="1" Style="{StaticResource OverlayScrollViewer}">
+                <ScrollViewer x:Name="ContentScroll" Grid.Row="1" Style="{StaticResource OverlayScrollViewer}"
+                              KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="1">
                     <StackPanel Margin="16,4,16,16">
 
                         <!-- Actions -->
@@ -284,9 +287,14 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Use Google as a backup" Style="{StaticResource RowLabel}"/>
+                                        <!-- The row's tooltip again on the switch: a tooltip shown for keyboard
+                                             focus, and the help text a screen reader reads, come from the
+                                             focused control only. -->
                                         <CheckBox x:Name="FallbackToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                                                   VerticalAlignment="Center" Margin="0,0,6,0"
                                                   Checked="OnFallbackToggled" Unchecked="OnFallbackToggled"
+                                                  ToolTip="{Binding ToolTip, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                                  AutomationProperties.HelpText="{Binding ToolTip, RelativeSource={RelativeSource AncestorType=Grid}}"
                                                   AutomationProperties.Name="Use Google as a backup"/>
                                     </Grid>
 
