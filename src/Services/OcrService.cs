@@ -53,21 +53,26 @@ public sealed class OcrService
     /// </summary>
     public async Task<List<OcrBlock>> RecognizeAsync(Bitmap bitmap, string? sourceLang = null)
     {
-        double scale = ChooseScale(bitmap);
-        Bitmap? scaledOwned = Math.Abs(scale - 1.0) < 0.001 ? null : Rescale(bitmap, scale);
+        // The upscale and the copy take hundreds of ms on a 4K screen: keep them off the
+        // UI thread so the spinner keeps turning. The caller awaits, so nothing else
+        // touches the bitmap meanwhile.
+        var (softwareBitmap, scale) = await Task.Run(() =>
+        {
+            double s = ChooseScale(bitmap);
+            Bitmap? scaledOwned = Math.Abs(s - 1.0) < 0.001 ? null : Rescale(bitmap, s);
 
-        // Convert to a SoftwareBitmap, then free the upscaled GDI bitmap immediately —
-        // before the (memory-heavy) recognizers run — so we never hold the scaled
-        // bitmap and the SoftwareBitmap alongside the OCR working set at the same time.
-        SoftwareBitmap softwareBitmap;
-        try
-        {
-            softwareBitmap = ToSoftwareBitmap(scaledOwned ?? bitmap);
-        }
-        finally
-        {
-            scaledOwned?.Dispose();
-        }
+            // Convert to a SoftwareBitmap, then free the upscaled GDI bitmap immediately —
+            // before the (memory-heavy) recognizers run — so we never hold the scaled
+            // bitmap and the SoftwareBitmap alongside the OCR working set at the same time.
+            try
+            {
+                return (ToSoftwareBitmap(scaledOwned ?? bitmap), s);
+            }
+            finally
+            {
+                scaledOwned?.Dispose();
+            }
+        });
 
         using (softwareBitmap)
         {

@@ -117,8 +117,9 @@ public partial class OverlayWindow : Window
             // coordinates land on the right physical pixels.
             _pixelToDip = WindowPlacement.PixelToDip(this, _pixelToDip);
 
-            PlaceBackgroundImage();
-            BuildOverlayBoxes();
+            // Loaded runs after Show() has returned, outside the caller's try/catch: a
+            // failure here would otherwise take the whole tray app down.
+            if (!TryLayout()) return;
             BeginAnimation(OpacityProperty,
                 new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(150))));
             Activate();
@@ -135,9 +136,22 @@ public partial class OverlayWindow : Window
         // The boxes were laid out for the old DPI; rebuild them so they stay over the
         // original text. Block state (translations) lives on the OcrBlocks, so nothing is lost.
         if (IsLoaded)
+            TryLayout();
+    }
+
+    private bool TryLayout()
+    {
+        try
         {
             PlaceBackgroundImage();
             BuildOverlayBoxes();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Close();
+            MessageBox.Show(ex.Message, "WinLens — error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 

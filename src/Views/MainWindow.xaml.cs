@@ -29,6 +29,9 @@ public partial class MainWindow : Window, IDisposable
     private OverlayWindow? _overlay;
 
     private bool _busy;
+    // Set while a new capture closes the previous overlay (see RunTranslateAsync).
+    private bool _replacingOverlay;
+    private bool _settingsOwedBack;
 
     public MainWindow()
     {
@@ -76,7 +79,10 @@ public partial class MainWindow : Window, IDisposable
             var info = Application.GetResourceStream(
                 new Uri("pack://application:,,,/assets/winlens.ico"));
             if (info != null)
-                Tray.Icon = new System.Drawing.Icon(info.Stream);
+            {
+                using var stream = info.Stream; // Icon copies what it needs
+                Tray.Icon = new System.Drawing.Icon(stream);
+            }
         }
         catch { /* fall back to no icon */ }
     }
@@ -242,8 +248,17 @@ public partial class MainWindow : Window, IDisposable
             // own translation. Close it and give it a beat to leave the screen.
             if (_overlay != null)
             {
-                _overlay.Close();
+                // Its Closed handler would bring the settings window back only for us to
+                // hide it again below (a visible flash): take over that duty instead.
+                _replacingOverlay = true;
+                try { _overlay.Close(); }
+                finally { _replacingOverlay = false; }
                 _overlay = null;
+                if (_settingsOwedBack)
+                {
+                    _settingsOwedBack = false;
+                    restoreSettings = true;
+                }
                 await Task.Delay(160);
             }
 
@@ -324,8 +339,9 @@ public partial class MainWindow : Window, IDisposable
             {
                 if (ReferenceEquals(_overlay, shown))
                     _overlay = null;
-                if (bringSettingsBack)
-                    _settingsWindow?.Show();
+                if (!bringSettingsBack) return;
+                if (_replacingOverlay) _settingsOwedBack = true;
+                else _settingsWindow?.Show();
             };
 
             loading.Close();
