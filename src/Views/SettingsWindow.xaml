@@ -149,7 +149,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <Button x:Name="TranslateButton" Grid.Column="0" Style="{StaticResource PrimaryButton}"
-                                    Click="OnTranslateNow">
+                                    Click="OnTranslateNow" AutomationProperties.Name="Translate screen">
                                 <StackPanel Orientation="Horizontal">
                                     <Path Style="{StaticResource Icon}" Data="{StaticResource IconScreen}"/>
                                     <TextBlock Text="Translate screen" Margin="9,0,0,0" VerticalAlignment="Center"/>
@@ -159,7 +159,7 @@
                                     Height="40" Padding="16,0" Margin="8,0,0,0"
                                     Background="{DynamicResource CardBrush}"
                                     BorderBrush="{DynamicResource BorderStrongBrush}"
-                                    Click="OnTranslateRegion">
+                                    Click="OnTranslateRegion" AutomationProperties.Name="Region">
                                 <StackPanel Orientation="Horizontal">
                                     <Path Style="{StaticResource Icon}" Data="{StaticResource IconRegion}"/>
                                     <TextBlock Text="Region" Margin="9,0,0,0" VerticalAlignment="Center"/>
