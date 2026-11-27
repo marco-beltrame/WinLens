@@ -2,7 +2,7 @@ namespace WinLens.Services.Translation;
 
 public enum TranslationEngine
 {
-    /// <summary>Google's free endpoint, MyMemory as fallback. No setup.</summary>
+    /// <summary>Google's free endpoint, then Microsoft's (the one Edge uses) and MyMemory as fallbacks. No setup.</summary>
     Google,
     /// <summary>A LibreTranslate server (self-hosted or a hosted instance).</summary>
     LibreTranslate,
@@ -14,7 +14,7 @@ public enum TranslationEngine
 /// <param name="ApiKey">Optional key, sent as LibreTranslate's api_key or as a Bearer token.</param>
 /// <param name="Model">Model name for <see cref="TranslationEngine.LocalLlm"/>; empty picks the server's first model.</param>
 /// <param name="FallbackToGoogle">
-/// Use Google (then MyMemory) for lines the chosen engine could not translate. Off by
+/// Use Google (then Microsoft, then MyMemory) for lines the chosen engine could not translate. Off by
 /// default: whoever picks their own server usually wants their text to stay on it.
 /// </param>
 public sealed record EngineOptions(

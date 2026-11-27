@@ -129,10 +129,10 @@ WinLens 使用 Windows 自带的 OCR 引擎，因此只能识别已安装对应 
 1. 捕获整个虚拟屏幕（DPI 精确，覆盖所有显示器）。
 2. 将图像放大约 2 倍，让小号 UI 文字更可靠地被识别。
 3. 运行每个已安装的 OCR 引擎，各自只保留文字系统匹配的文本块（拉丁文字交给拉丁引擎，CJK 交给 CJK 引擎），再去除重叠的重复项。
-4. 逐行翻译（Google 接口，MyMemory 作为兜底），按会话缓存。
+4. 逐行翻译（Google 接口；Google 无法访问时（如中国大陆）改用微软翻译，MyMemory 作为最后兜底），按会话缓存。
 5. 在每行原文上绘制一个不透明、颜色与字体均匹配的覆盖框。
 
-> 说明：OCR 在本地运行；翻译通过在线接口（Google / MyMemory）完成。离线翻译已在路线图中。
+> 说明：OCR 在本地运行；翻译通过在线接口（Google / 微软翻译 / MyMemory）完成。离线翻译已在路线图中。
 
 ## 路线图
 
@@ -174,6 +174,6 @@ MIT。见 [LICENSE](LICENSE)。
 
 ## 致谢
 
-- 翻译通过 Google Translate 接口完成，[MyMemory](https://mymemory.translated.net/) 作为兜底。
+- 翻译通过 Google Translate 接口完成，[微软翻译](https://www.microsoft.com/translator/) 和 [MyMemory](https://mymemory.translated.net/) 作为兜底。
 - 托盘集成使用 [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon)。
 - 基于 .NET 10 与 WPF 构建。

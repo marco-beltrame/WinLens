@@ -83,7 +83,7 @@ Choose the engine under **Translation engine** in the control panel.
 
 | Engine | Setup | Where your text goes |
 |---|---|---|
-| **Google Translate** (default) | None | Google's servers, with MyMemory as a fallback |
+| **Google Translate** (default) | None | Google's servers, with Microsoft Translator and MyMemory as fallbacks |
 | **LibreTranslate** | The address of a server, plus an API key for hosted ones | That server only |
 | **Local AI model** | An OpenAI-compatible server such as [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), e.g. `http://localhost:11434/v1` | Your own PC |
 
@@ -92,7 +92,7 @@ With LibreTranslate or a local model, nothing is sent to Google unless you turn 
 API keys are encrypted for your Windows account (DPAPI) before they are saved.
 
 With the default engine, the text WinLens reads from your screen is sent to Google
-to be translated. Screenshots themselves never leave your PC.
+to be translated (or to Microsoft Translator where Google can't be reached, such as mainland China). Screenshots themselves never leave your PC.
 
 ## Installation
 
@@ -207,6 +207,6 @@ MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgements
 
-- Translation through the Google Translate endpoint, with a [MyMemory](https://mymemory.translated.net/) fallback.
+- Translation through the Google Translate endpoint, with [Microsoft Translator](https://www.microsoft.com/translator/) and [MyMemory](https://mymemory.translated.net/) fallbacks.
 - Tray integration with [Hardcodet.NotifyIcon.Wpf](https://github.com/hardcodet/wpf-notifyicon).
 - Built with .NET 10 and WPF.

@@ -18,6 +18,8 @@ public class BatchTranslationTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            if (request.RequestUri!.Host.Contains("microsoft"))
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
             if (!request.RequestUri!.Host.Contains("google"))
             {
                 Interlocked.Increment(ref MyMemoryCalls);
