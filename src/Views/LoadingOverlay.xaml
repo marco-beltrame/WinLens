@@ -13,34 +13,38 @@
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="Manual"
         UseLayoutRounding="True"
-        FontFamily="Segoe UI">
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        Foreground="{DynamicResource TextBrush}">
 
-    <Border Padding="24,18" CornerRadius="14"
-            Background="{StaticResource BgBrush}"
-            BorderBrush="{StaticResource BorderStrongBrush}"
-            BorderThickness="1">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" BlurRadius="28" ShadowDepth="5" Opacity="0.5"/>
-        </Border.Effect>
-
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <Grid Width="26" Height="26">
-                <Ellipse Width="26" Height="26" StrokeThickness="3"
-                         Stroke="{StaticResource BorderBrush}"/>
-                <Ellipse Width="26" Height="26" StrokeThickness="3"
-                         Stroke="{StaticResource AccentBrush}"
-                         StrokeDashArray="20 100" StrokeDashCap="Round"
-                         RenderTransformOrigin="0.5,0.5">
-                    <Ellipse.RenderTransform>
-                        <RotateTransform x:Name="Rot"/>
-                    </Ellipse.RenderTransform>
-                </Ellipse>
-            </Grid>
-            <TextBlock Text="Translating…" Foreground="{StaticResource TextBrush}"
-                       FontSize="14" FontWeight="SemiBold"
-                       VerticalAlignment="Center" Margin="14,0,2,0"/>
-        </StackPanel>
-    </Border>
+    <!-- The margin is room for the shadow, cast by the plain backing shape. -->
+    <Grid Margin="24">
+        <Border CornerRadius="12" Background="{DynamicResource PopupBrush}">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="5" Direction="270"
+                                  Opacity="0.4"/>
+            </Border.Effect>
+        </Border>
+        <Border Padding="14,12,18,12" CornerRadius="12"
+                Background="{DynamicResource PopupBrush}"
+                BorderBrush="{DynamicResource BorderStrongBrush}"
+                BorderThickness="1">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid Width="18" Height="18">
+                    <Ellipse StrokeThickness="2.5" Stroke="{DynamicResource BorderStrongBrush}"/>
+                    <Ellipse StrokeThickness="2.5" Stroke="{DynamicResource AccentBrush}"
+                             StrokeDashArray="6 100" StrokeDashCap="Round"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform x:Name="Rot"/>
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                </Grid>
+                <TextBlock Text="Translating…" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="11,0,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
 
     <Window.Triggers>
         <EventTrigger RoutedEvent="Loaded">

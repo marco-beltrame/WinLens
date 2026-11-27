@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using WinLens.Theme;
 using WinLens.Views;
 
 namespace WinLens;
@@ -42,6 +43,9 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        // Before the first window exists, so nothing is ever drawn in the wrong colours.
+        ThemeManager.Apply();
+
         // Show/Hide rather than EnsureHandle: the tray host needs its HWND, but it also
         // needs the Loaded event, which only fires once the window has actually been
         // shown — that is where the tray icon and the global hotkeys are set up.
@@ -49,6 +53,7 @@ public partial class App : Application
         _main = new MainWindow();
         _main.Show();
         _main.Hide();
+        ThemeManager.Follow(_main);
 
         // Allow a shortcut (or first launch) to open the settings window directly.
         if (e.Args.Any(a => string.Equals(a, "--settings", StringComparison.OrdinalIgnoreCase)))

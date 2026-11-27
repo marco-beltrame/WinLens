@@ -25,6 +25,9 @@ public partial class MainWindow : Window, IDisposable
     private readonly TranslationService _translator = new();
     private GlobalHotkey? _hotkey;
     private GlobalHotkey? _regionHotkey;
+    // Whether Windows accepted each shortcut; the tray menu only advertises live ones.
+    private bool _hotkeyLive;
+    private bool _regionHotkeyLive;
     private SettingsWindow? _settingsWindow;
     private OverlayWindow? _overlay;
 
@@ -101,8 +104,9 @@ public partial class MainWindow : Window, IDisposable
         _regionHotkey = new GlobalHotkey(this, RegionHotkeyId);
         _regionHotkey.Pressed += OnRegionHotkey;
 
-        return (TryRegister(_hotkey, s.HotkeyModifiers, s.HotkeyKey),
-                TryRegister(_regionHotkey, s.RegionHotkeyModifiers, s.RegionHotkeyKey));
+        _hotkeyLive = TryRegister(_hotkey, s.HotkeyModifiers, s.HotkeyKey);
+        _regionHotkeyLive = TryRegister(_regionHotkey, s.RegionHotkeyModifiers, s.RegionHotkeyKey);
+        return (_hotkeyLive, _regionHotkeyLive);
     }
 
     private static bool TryRegister(GlobalHotkey hotkey, HotkeyModifiers mods, Key key)
@@ -173,6 +177,8 @@ public partial class MainWindow : Window, IDisposable
         _regionHotkey?.Dispose();
         _hotkey = null;
         _regionHotkey = null;
+        _hotkeyLive = false;
+        _regionHotkeyLive = false;
     }
 
     private async void OnFullScreenHotkey() => await RunTranslateAsync(regionSelect: false);
@@ -189,6 +195,20 @@ public partial class MainWindow : Window, IDisposable
 
     private void OnOpenSettings(object sender, RoutedEventArgs e) => OpenSettings();
 
+    /// <summary>
+    /// Shows each action's shortcut next to it, read when the menu opens so it is never
+    /// stale. A shortcut Windows refused (another app owns it) is left out rather than
+    /// shown as if it worked.
+    /// </summary>
+    private void OnTrayMenuOpened(object sender, RoutedEventArgs e)
+    {
+        var s = _settings.Current;
+        TranslateScreenItem.InputGestureText = _hotkeyLive
+            ? HotkeyText.Format(s.HotkeyModifiers, s.HotkeyKey) : "";
+        TranslateRegionItem.InputGestureText = _regionHotkeyLive
+            ? HotkeyText.Format(s.RegionHotkeyModifiers, s.RegionHotkeyKey) : "";
+    }
+
     private async void OnTranslateNow(object sender, RoutedEventArgs e)
         => await RunTranslateAsync(regionSelect: false);
 
@@ -203,6 +223,7 @@ public partial class MainWindow : Window, IDisposable
                 _settings,
                 // Settings hides itself before calling this; bring it back afterwards.
                 onTranslate: () => _ = RunTranslateAsync(regionSelect: false, reopenSettings: true),
+                onTranslateRegion: () => _ = RunTranslateAsync(regionSelect: true, reopenSettings: true),
                 onApplyHotkeys: TryApplyHotkeys,
                 onHotkeyCapturePaused: SetHotkeysPaused,
                 onEngineChanged: () => _translator.Configure(_settings.Current.ToEngineOptions()),
