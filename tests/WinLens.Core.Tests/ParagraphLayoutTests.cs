@@ -187,6 +187,35 @@ public class ParagraphLayoutTests
         }
     }
 
+    // ------------------------------------------------------------------ rows
+
+    [Fact]
+    public void EvenRows_AreEquallyTallAndEvenlySpaced()
+    {
+        // Boxes that hug the ink: the middle line has no ascenders (starts lower, is
+        // shorter), the last one no descenders.
+        var rows = ParagraphLayout.EvenRows(new[] { (100.0, 15.0), (125.4, 11.6), (144.8, 11.5), (167.2, 15.0) });
+
+        Assert.All(rows, r => Assert.Equal(15.0, r.Height));
+        var steps = rows.Zip(rows.Skip(1), (a, b) => b.Top - a.Top).ToArray();
+        Assert.All(steps, step => Assert.Equal(steps[0], step, 6));
+        Assert.Equal(100.0, rows[0].Top, 0);
+    }
+
+    [Fact]
+    public void EvenRows_AreNeverTallerThanThePitch()
+    {
+        // A headline set tighter than its own height: the boxes of the two lines overlap.
+        var rows = ParagraphLayout.EvenRows(new[] { (149.0, 61.0), (205.0, 74.0) });
+
+        Assert.Equal(56.0, rows[0].Height);
+        Assert.True(rows[0].Top + rows[0].Height <= rows[1].Top);
+    }
+
+    [Fact]
+    public void EvenRows_LeaveASingleLineAlone() =>
+        Assert.Equal(new[] { (10.0, 20.0) }, ParagraphLayout.EvenRows(new[] { (10.0, 20.0) }));
+
     // ------------------------------------------------------------------ reach
 
     [Fact]

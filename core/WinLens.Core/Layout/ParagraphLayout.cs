@@ -123,6 +123,9 @@ public static class ParagraphLayout
         // Medians, so the odd line that starts lower does not tilt the whole paragraph.
         double pitch = Median(Enumerable.Range(1, lines.Count - 1).Select(k => lines[k].Top - lines[k - 1].Top));
         double first = Median(Enumerable.Range(0, lines.Count).Select(k => lines[k].Top - k * pitch));
+        // Text set tighter than its own height: a row must not reach into the next one,
+        // or the fill behind one line would cover the bottom of the line above.
+        if (pitch > 0) height = Math.Min(height, pitch);
 
         var rows = new (double Top, double Height)[lines.Count];
         for (int k = 0; k < rows.Length; k++)

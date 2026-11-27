@@ -292,7 +292,10 @@ public partial class OverlayWindow : Window
             for (int k = 0; k < lines.Length; k++)
             {
                 var (bg, fg) = SampleColors(pixels, lineRects[k]);
-                lines[k] = AddLineBox(slots[k], bg, fg, menu);
+                // The fill of a paragraph's line stops where the line above ends: it is
+                // drawn later, and would cover the bottom of that line's text.
+                double roomAbove = k > 0 ? slots[k].Top - slots[k - 1].Bottom : double.MaxValue;
+                lines[k] = AddLineBox(slots[k], bg, fg, menu, roomAbove);
             }
 
             double[] capacities = Array.Empty<double>();
@@ -330,7 +333,15 @@ public partial class OverlayWindow : Window
             // Never smaller than the original line, which the fill has to hide.
             double top = Math.Min(rows[k].Top, slots[k].Top);
             double bottom = Math.Max(rows[k].Top + rows[k].Height, slots[k].Bottom);
-            slots[k] = new Rect(slots[k].X, top, slots[k].Width, bottom - top);
+            // But never into the line above (lines set so tight that their boxes overlap):
+            // the two meet halfway.
+            if (k > 0 && top < slots[k - 1].Bottom)
+            {
+                var above = slots[k - 1];
+                top = Math.Max(above.Top + 1, Math.Min(bottom - 1, (top + above.Bottom) / 2));
+                slots[k - 1] = new Rect(above.X, above.Top, above.Width, top - above.Top);
+            }
+            slots[k] = new Rect(slots[k].X, top, slots[k].Width, Math.Max(1, bottom - top));
         }
         return slots;
     }
@@ -352,20 +363,21 @@ public partial class OverlayWindow : Window
         } - 2).ToArray();
     }
 
-    private LineBox AddLineBox(Rect slot, Color bg, Color fg, ContextMenu menu)
+    private LineBox AddLineBox(Rect slot, Color bg, Color fg, ContextMenu menu, double roomAbove = double.MaxValue)
     {
         // Grow the filled background past the text so the original characters
         // underneath are fully covered (kills leftover edges like a stray "I").
         double padX = Math.Max(2.0, slot.Height * 0.18);
         double padY = Math.Max(1.0, slot.Height * 0.10);
+        double padTop = Math.Max(0, Math.Min(padY, roomAbove));
 
         var border = new Border
         {
             Background = new SolidColorBrush(bg),
             CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(padX, padY, padX, padY),
+            Padding = new Thickness(padX, padTop, padX, padY),
             Width  = slot.Width + padX * 2,
-            Height = slot.Height + padY * 2,
+            Height = slot.Height + padTop + padY,
             Cursor = Cursors.IBeam,
             SnapsToDevicePixels = true,
         };
@@ -401,7 +413,7 @@ public partial class OverlayWindow : Window
         border.MouseLeftButtonDown += (_, ev) => ev.Handled = true;
 
         Canvas.SetLeft(border, slot.X - padX);
-        Canvas.SetTop(border,  slot.Y - padY);
+        Canvas.SetTop(border,  slot.Y - padTop);
         OverlayCanvas.Children.Add(border);
 
         return new LineBox(border, textBox, slot);
