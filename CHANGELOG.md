@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format is based on
   translation back.
 
 ### Changed
+- A sentence that wraps over several lines is now translated as one sentence instead of line
+  by line, so it keeps its meaning and reads naturally. The translation is laid back over the
+  same lines. Menus, lists and chat messages are still translated one line at a time (#42).
 - A new look across the app: cleaner control panel, tray menu, overlay bar and loading
   indicator, with a single accent colour and simple line icons.
 - WinLens follows the Windows light or dark mode, and switches as soon as Windows does.

@@ -60,6 +60,7 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 
 - Translates on-screen text in place: the translation replaces the original, with a matching background and font, instead of appearing in a separate box.
 - Works on any window (apps, games, chats, documents), not just the browser.
+- A sentence that wraps over several lines is translated as one sentence, then laid back over the same lines.
 - Reads Latin and CJK (Chinese, Japanese, Korean) on the same screen.
 - Global hotkey, default <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>.
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
@@ -155,18 +156,25 @@ Leaving "Translate from" on Auto is usually best: WinLens runs every installed r
 keeps the text each one reads well, so a mixed-language screen still works. Forcing a single
 language only saves a little time.
 
+To translate strictly line by line, as older versions did, set `"GroupParagraphs": false` in
+`%AppData%\WinLens\settings.json` and restart WinLens.
+
 ## How it works
 
 ```
-Hotkey > capture screen > upscale > OCR (per script) > translate > overlay in place
+Hotkey > capture screen > upscale > OCR (per script) > paragraphs > translate > overlay in place
 ```
 
 1. Capture the monitor under the cursor, or the region you drag (DPI-accurate on mixed-scaling setups).
 2. Upscale the image about 2x so small UI text is recognized more reliably.
 3. Run every installed OCR recognizer and keep from each only the blocks whose script matches
    it (Latin from the Latin engine, CJK from the CJK engine), then drop overlapping duplicates.
-4. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
-5. Draw an opaque, color- and font-matched box over each original line.
+4. Put wrapped lines back together. OCR reads line by line, so lines that continue each other
+   (same size, same spacing, a sentence still open) are joined into one paragraph. Menus, lists,
+   chat messages and anything doubtful stay separate.
+5. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
+6. Draw an opaque, color- and font-matched box over each original line. A paragraph's
+   translation is spread over the lines it came from, in one font size.
 
 ## Roadmap
 

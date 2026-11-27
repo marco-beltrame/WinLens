@@ -14,6 +14,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using WinLens.Layout;
 using WinLens.Models;
 using WinLens.Native;
 using WinLens.Services;
@@ -41,7 +42,19 @@ public partial class OverlayWindow : Window
     private readonly IReadOnlyList<string> _recentTargets;
     private double _pixelToDip;
 
-    private readonly Dictionary<OcrBlock, TextBox> _textBoxes = new();
+    // What a block's text is drawn in: one box per line of the original.
+    private readonly Dictionary<OcrBlock, BlockBoxes> _boxes = new();
+    // Text widths at ReferenceFontSize, so a word is only measured once per overlay.
+    private readonly Dictionary<string, double> _measured = new(StringComparer.Ordinal);
+
+    private static readonly FontFamily OverlayFont = new("Segoe UI");
+    private static readonly Typeface OverlayTypeface =
+        new(OverlayFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+    private const double ReferenceFontSize = 32;
+    private const double MinFontSize = 7;
+    // Share of a line's ink height the font size may take before descenders are cut off.
+    private const double FontPerLineHeight = 0.78;
+
     private string _currentTarget;
     private bool _suppressLangEvents;
 
@@ -107,7 +120,8 @@ public partial class OverlayWindow : Window
             // and the per-line text boxes. Without this the visual tree keeps them alive.
             BackgroundImage.Source = null;
             OverlayCanvas.Children.Clear();
-            _textBoxes.Clear();
+            _boxes.Clear();
+            _measured.Clear();
             _screenshot.Dispose();
 
             // Reclaim only once the window is actually torn down and dereferenced —
@@ -236,115 +250,290 @@ public partial class OverlayWindow : Window
         {
             var b = _blocks[i];
             b.TranslatedText = translated[i];
-            if (_textBoxes.TryGetValue(b, out var tb))
-                ApplyText(tb, translated[i]);
+            if (_boxes.TryGetValue(b, out var boxes))
+                ApplyText(boxes, translated[i]);
         }
     }
+
+    /// <summary>One line of a block on screen: the fill that hides the original and the text over it.</summary>
+    private sealed record LineBox(Border Border, TextBox Text, Rect Slot);
+
+    /// <summary>
+    /// The boxes of one block. A single line has one; a paragraph one per original line,
+    /// with how wide the text of each may become.
+    /// </summary>
+    private sealed record BlockBoxes(LineBox[] Lines, ParagraphAlignment Alignment, double FontSize, double[] Capacities);
 
     private void BuildOverlayBoxes()
     {
         OverlayCanvas.Children.Clear();
-        _textBoxes.Clear();
+        _boxes.Clear();
 
         // Lock the screenshot once for the whole pass. Sampling used to go through
         // Bitmap.GetPixel, which locks and validates per call — around 200 calls per
         // block, on the UI thread, was a visible stall before the overlay faded in.
         using var pixels = new PixelReader(_screenshot);
 
-        foreach (var block in _blocks)
+        // Where every line goes, before any is drawn: a paragraph has to know what else
+        // sits on its rows.
+        var lineRectsOf = _blocks
+            .Select(b => b.LineRects.Count > 0 ? b.LineRects : new[] { b.BoundingRect })
+            .ToArray();
+        var slotsOf = lineRectsOf.Select(Slots).ToArray();
+
+        for (int i = 0; i < _blocks.Count; i++)
         {
-            var (bg, fg) = SampleColors(pixels, block.BoundingRect);
+            var block = _blocks[i];
+            var lineRects = lineRectsOf[i];
+            var slots = slotsOf[i];
+            var menu = BuildContextMenu(block);
 
-            // Convert pixel rect → DIPs, shifted by where the screenshot sits in the window.
-            double dipX = (block.BoundingRect.X + OffsetX) * _pixelToDip;
-            double dipY = (block.BoundingRect.Y + OffsetY) * _pixelToDip;
-            double dipW = block.BoundingRect.Width  * _pixelToDip;
-            double dipH = block.BoundingRect.Height * _pixelToDip;
-
-            // Grow the filled background past the text so the original characters
-            // underneath are fully covered (kills leftover edges like a stray "I").
-            double padX = Math.Max(2.0, dipH * 0.18);
-            double padY = Math.Max(1.0, dipH * 0.10);
-
-            var border = new Border
+            var lines = new LineBox[slots.Length];
+            for (int k = 0; k < lines.Length; k++)
             {
-                Background = new SolidColorBrush(bg),
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(padX, padY, padX, padY),
-                Width  = dipW + padX * 2,
-                Height = dipH + padY * 2,
-                Cursor = Cursors.IBeam,
-                SnapsToDevicePixels = true,
-            };
+                var (bg, fg) = SampleColors(pixels, lineRects[k]);
+                // The fill of a paragraph's line stops where the line above ends: it is
+                // drawn later, and would cover the bottom of that line's text.
+                double roomAbove = k > 0 ? slots[k].Top - slots[k - 1].Bottom : double.MaxValue;
+                lines[k] = AddLineBox(slots[k], bg, fg, menu, roomAbove);
+            }
 
-            // Font size derived from the OCR rect height. Roughly 70% of line
-            // height = visible cap height for Segoe UI.
-            double fontSize = Math.Max(8, dipH * 0.7);
-
-            var textBox = new TextBox
+            double[] capacities = Array.Empty<double>();
+            if (slots.Length > 1)
             {
-                Text = block.TranslatedText ?? "",
-                Foreground = new SolidColorBrush(fg),
-                Background = System.Windows.Media.Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                IsReadOnly = true,
-                IsTabStop = false,
-                FontFamily = new FontFamily("Segoe UI"),
-                FontWeight = FontWeights.SemiBold,
-                FontSize = fontSize,
-                TextWrapping = TextWrapping.NoWrap,
-                TextAlignment = TextAlignment.Left,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(0),
-                Margin = new Thickness(0),
-                CaretBrush = new SolidColorBrush(fg),
-                SelectionBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x7B, 0x6C, 0xF6)),
-                Cursor = Cursors.IBeam,
-                ContextMenu = BuildContextMenu(block),
-                Width  = dipW,
-                Height = dipH,
-            };
-            border.Child = textBox;
+                var others = slotsOf.Where((_, j) => j != i).SelectMany(o => o).Select(ToOcrRect);
+                capacities = Capacities(slots, block.Alignment,
+                    ParagraphLayout.Reach(slots.Select(ToOcrRect).ToArray(), others, slots.Min(r => r.Height) * 0.5));
+            }
 
-            // Stop bare-canvas click-to-close from firing for clicks on a box.
-            border.MouseLeftButtonDown += (_, ev) => ev.Handled = true;
-
-            Canvas.SetLeft(border, dipX - padX);
-            Canvas.SetTop(border,  dipY - padY);
-            OverlayCanvas.Children.Add(border);
-
-            _textBoxes[block] = textBox;
-            ApplyText(textBox, block.TranslatedText ?? "");
+            var boxes = new BlockBoxes(lines, block.Alignment,
+                Math.Max(8, slots.Min(r => r.Height) * FontPerLineHeight), capacities);
+            _boxes[block] = boxes;
+            ApplyText(boxes, block.TranslatedText ?? "");
         }
     }
 
-    /// <summary>Sets the text and shrinks the font so it fits the original box width.</summary>
-    private void ApplyText(TextBox tb, string text)
+    /// <summary>
+    /// Where each line of a block is drawn, in DIPs inside the window. A single line keeps
+    /// its OCR box; the lines of a paragraph become equally tall, evenly spaced rows so
+    /// one font size sits the same in each of them.
+    /// </summary>
+    private Rect[] Slots(IReadOnlyList<Rect> lineRects)
     {
-        tb.Text = text;
-        tb.FontSize = FitFontSize(text, tb.FontFamily, tb.FontWeight, tb.Width, tb.Height);
+        // Pixel rect → DIPs, shifted by where the screenshot sits in the window.
+        var slots = lineRects
+            .Select(r => new Rect((r.X + OffsetX) * _pixelToDip, (r.Y + OffsetY) * _pixelToDip,
+                                  r.Width * _pixelToDip, r.Height * _pixelToDip))
+            .ToArray();
+        if (slots.Length < 2) return slots;
+
+        var rows = ParagraphLayout.EvenRows(slots.Select(r => (r.Top, r.Height)).ToArray());
+        for (int k = 0; k < slots.Length; k++)
+        {
+            // Never smaller than the original line, which the fill has to hide.
+            double top = Math.Min(rows[k].Top, slots[k].Top);
+            double bottom = Math.Max(rows[k].Top + rows[k].Height, slots[k].Bottom);
+            // But never into the line above (lines set so tight that their boxes overlap):
+            // the two meet halfway.
+            if (k > 0 && top < slots[k - 1].Bottom)
+            {
+                var above = slots[k - 1];
+                top = Math.Max(above.Top + 1, Math.Min(bottom - 1, (top + above.Bottom) / 2));
+                slots[k - 1] = new Rect(above.X, above.Top, above.Width, top - above.Top);
+            }
+            slots[k] = new Rect(slots[k].X, top, slots[k].Width, Math.Max(1, bottom - top));
+        }
+        return slots;
     }
 
-    private double FitFontSize(string text, FontFamily family, FontWeight weight, double maxW, double maxH)
+    private static OcrRect ToOcrRect(Rect r) => new(r.X, r.Y, r.Width, r.Height);
+
+    /// <summary>
+    /// How wide the text of each line of a paragraph may become: from where the line starts
+    /// to as far as it may reach. Two DIPs less, the breathing room single lines get too.
+    /// </summary>
+    private static double[] Capacities(Rect[] slots, ParagraphAlignment alignment, (double Left, double Right)[] reach)
     {
-        double size = Math.Max(8, maxH * 0.78);
+        double mid = (slots.Min(r => r.Left) + slots.Max(r => r.Right)) / 2;
+        return slots.Select((slot, k) => alignment switch
+        {
+            ParagraphAlignment.Center => 2 * Math.Min(mid - reach[k].Left, reach[k].Right - mid),
+            ParagraphAlignment.Right => slot.Right - reach[k].Left,
+            _ => reach[k].Right - slot.Left,
+        } - 2).ToArray();
+    }
+
+    private LineBox AddLineBox(Rect slot, Color bg, Color fg, ContextMenu menu, double roomAbove = double.MaxValue)
+    {
+        // Grow the filled background past the text so the original characters
+        // underneath are fully covered (kills leftover edges like a stray "I").
+        double padX = Math.Max(2.0, slot.Height * 0.18);
+        double padY = Math.Max(1.0, slot.Height * 0.10);
+        double padTop = Math.Max(0, Math.Min(padY, roomAbove));
+
+        var border = new Border
+        {
+            Background = new SolidColorBrush(bg),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(padX, padTop, padX, padY),
+            Width  = slot.Width + padX * 2,
+            Height = slot.Height + padTop + padY,
+            Cursor = Cursors.IBeam,
+            SnapsToDevicePixels = true,
+        };
+
+        var textBox = new TextBox
+        {
+            Foreground = new SolidColorBrush(fg),
+            Background = System.Windows.Media.Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            IsReadOnly = true,
+            IsTabStop = false,
+            FontFamily = OverlayFont,
+            FontWeight = FontWeights.SemiBold,
+            // Font size derived from the OCR rect height. Roughly 70% of line
+            // height = visible cap height for Segoe UI.
+            FontSize = Math.Max(8, slot.Height * 0.7),
+            TextWrapping = TextWrapping.NoWrap,
+            TextAlignment = TextAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            CaretBrush = new SolidColorBrush(fg),
+            SelectionBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x7B, 0x6C, 0xF6)),
+            Cursor = Cursors.IBeam,
+            ContextMenu = menu,
+            Width  = slot.Width,
+            Height = slot.Height,
+        };
+        border.Child = textBox;
+
+        // Stop bare-canvas click-to-close from firing for clicks on a box.
+        border.MouseLeftButtonDown += (_, ev) => ev.Handled = true;
+
+        Canvas.SetLeft(border, slot.X - padX);
+        Canvas.SetTop(border,  slot.Y - padTop);
+        OverlayCanvas.Children.Add(border);
+
+        return new LineBox(border, textBox, slot);
+    }
+
+    /// <summary>
+    /// Shows <paramref name="text"/> in a block's boxes. A single line shrinks the font
+    /// until the text fits its box; a paragraph is poured over its lines again.
+    /// </summary>
+    private void ApplyText(BlockBoxes boxes, string text)
+    {
+        if (boxes.Lines.Length > 1)
+        {
+            ApplyParagraph(boxes, text);
+            return;
+        }
+
+        var tb = boxes.Lines[0].Text;
+        tb.Text = text;
+        tb.FontSize = FitFontSize(text, tb.Width, tb.Height);
+    }
+
+    private void ApplyParagraph(BlockBoxes boxes, string text)
+    {
+        var lines = boxes.Lines;
+        double left = lines.Min(l => l.Slot.Left), right = lines.Max(l => l.Slot.Right);
+        var capacities = boxes.Capacities;
+        var shares = lines.Select(l => l.Slot.Width).ToArray();
+
+        var fit = ParagraphLayout.Flow(text, capacities, shares,
+            s => MeasureWidth(s, boxes.FontSize), MinFontSize / boxes.FontSize);
+        double fontSize = Math.Max(MinFontSize, boxes.FontSize * fit.Scale);
+
+        for (int k = 0; k < lines.Length; k++)
+        {
+            var (border, tb, slot) = lines[k];
+            string line = fit.Lines[k];
+            double size = fontSize;
+            double width = line.Length == 0 ? 0 : MeasureWidth(line, size);
+            // Flow added up word widths; the line measured whole can differ by a hair.
+            if (width > capacities[k] + 0.5)
+            {
+                // Only when the text could not be made to fit (one very long word): this
+                // line alone shrinks further.
+                size = FitFontSize(line, capacities[k] + 2, slot.Height, size);
+                width = capacities[k];
+            }
+            width += 2;
+
+            // The fill hides the original line and backs the new one, whichever reaches further.
+            double x0, x1;
+            switch (boxes.Alignment)
+            {
+                case ParagraphAlignment.Center:
+                    double mid = (left + right) / 2;
+                    double half = Math.Max(width / 2, Math.Max(mid - slot.Left, slot.Right - mid));
+                    x0 = mid - half;
+                    x1 = mid + half;
+                    break;
+                case ParagraphAlignment.Right:
+                    x1 = slot.Right;
+                    x0 = Math.Min(slot.Left, slot.Right - width);
+                    break;
+                default:
+                    x0 = slot.Left;
+                    x1 = Math.Max(slot.Right, slot.Left + width);
+                    break;
+            }
+
+            tb.Text = line;
+            tb.FontSize = size;
+            tb.Width = x1 - x0;
+            tb.TextAlignment = boxes.Alignment switch
+            {
+                ParagraphAlignment.Center => TextAlignment.Center,
+                ParagraphAlignment.Right => TextAlignment.Right,
+                _ => TextAlignment.Left,
+            };
+            double padX = border.Padding.Left;
+            border.Width = tb.Width + padX * 2;
+            Canvas.SetLeft(border, x0 - padX);
+        }
+    }
+
+    /// <summary>The largest font size, from <paramref name="startSize"/> down, at which the text fits the width.</summary>
+    private double FitFontSize(string text, double maxW, double maxH, double? startSize = null)
+    {
+        double size = startSize ?? Math.Max(8, maxH * FontPerLineHeight);
         if (string.IsNullOrWhiteSpace(text) || double.IsNaN(maxW) || maxW <= 0)
             return size;
 
         double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var tf = new Typeface(family, FontStyles.Normal, weight, FontStretches.Normal);
 
-        for (int i = 0; i < 30 && size > 7; i++)
+        for (int i = 0; i < 30 && size > MinFontSize; i++)
         {
             var ft = new FormattedText(
                 text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                tf, size, System.Windows.Media.Brushes.Black, pixelsPerDip);
+                OverlayTypeface, size, System.Windows.Media.Brushes.Black, pixelsPerDip);
             if (ft.WidthIncludingTrailingWhitespace <= maxW - 2)
                 break;
             size -= Math.Max(0.5, size * 0.08);
         }
-        return Math.Max(7, size);
+        return Math.Max(MinFontSize, size);
+    }
+
+    /// <summary>
+    /// Width of <paramref name="text"/> at <paramref name="fontSize"/>. Measured once at a
+    /// fixed size and scaled: WPF's default (ideal) text layout is linear in the font size.
+    /// </summary>
+    private double MeasureWidth(string text, double fontSize)
+    {
+        if (!_measured.TryGetValue(text, out double atReference))
+        {
+            var ft = new FormattedText(
+                text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                OverlayTypeface, ReferenceFontSize, System.Windows.Media.Brushes.Black,
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            _measured[text] = atReference = ft.WidthIncludingTrailingWhitespace;
+        }
+        return atReference * fontSize / ReferenceFontSize;
     }
 
     /// <summary>

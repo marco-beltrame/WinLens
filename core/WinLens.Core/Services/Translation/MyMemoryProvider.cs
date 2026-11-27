@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,15 +9,16 @@ using System.Threading.Tasks;
 namespace WinLens.Services.Translation;
 
 /// <summary>
-/// MyMemory's free endpoint, the fallback when Google fails. One request per line: it has
-/// no batch form, no auto-detect (so the source is guessed) and a low daily quota.
+/// MyMemory's free endpoint, the fallback when Google fails. One request per text (more
+/// for a long paragraph): it has no batch form, no auto-detect (so the source is guessed)
+/// and a low daily quota.
 /// </summary>
 internal sealed class MyMemoryProvider : ITranslationProvider
 {
     private const string Endpoint = "https://api.mymemory.translated.net/get";
 
-    // MyMemory rejects queries over 500 chars (in-body, with HTTP 200).
-    private const int MaxChars = 500;
+    // MyMemory rejects queries over 500 bytes of UTF-8 (in-body, with HTTP 200).
+    internal const int MaxBytes = 500;
 
     private readonly TranslationHttp _http;
 
@@ -42,12 +44,82 @@ internal sealed class MyMemoryProvider : ITranslationProvider
         if (string.Equals(src, tgt, StringComparison.OrdinalIgnoreCase))
             return null;
 
-        if (text.Length > MaxChars)
-        {
-            _http.Log($"mymemory skipped: text is {text.Length} chars (max {MaxChars})");
-            return null;
-        }
+        var pieces = Split(text, MaxBytes);
+        if (pieces.Count == 1)
+            return await QueryAsync(text, src, tgt, ct);
 
+        // A paragraph too long for one query goes a few sentences at a time.
+        var whole = new StringBuilder();
+        foreach (var (piece, spaceBefore) in pieces)
+        {
+            if (await QueryAsync(piece, src, tgt, ct) is not { } part)
+                return null;
+            if (spaceBefore && whole.Length > 0) whole.Append(' ');
+            whole.Append(part);
+        }
+        return whole.ToString();
+    }
+
+    /// <summary>
+    /// Cuts <paramref name="text"/> into pieces of at most <paramref name="maxBytes"/> of
+    /// UTF-8, at the end of a sentence where there is one, else of a clause, else between
+    /// words. SpaceBefore says whether the piece was set off from the one before it.
+    /// </summary>
+    internal static List<(string Text, bool SpaceBefore)> Split(string text, int maxBytes)
+    {
+        var pieces = new List<(string, bool)>();
+        int start = 0;
+        bool spaceBefore = false;
+        while (start < text.Length)
+        {
+            // The longest stretch that fits, never ending inside a surrogate pair.
+            int end = start, bytes = 0;
+            while (end < text.Length)
+            {
+                int length = char.IsHighSurrogate(text[end]) && end + 1 < text.Length ? 2 : 1;
+                int size = Encoding.UTF8.GetByteCount(text.AsSpan(end, length));
+                if (bytes + size > maxBytes && end > start) break;
+                bytes += size;
+                end += length;
+            }
+
+            if (end < text.Length)
+            {
+                // Not so early that a paragraph turns into a request per clause.
+                int earliest = start + (end - start) / 3;
+                int cut = LastBreak(text, earliest, end, ".!?…。！？");
+                if (cut < 0) cut = LastBreak(text, earliest, end, ",;:，、；：");
+                if (cut < 0) cut = LastBreak(text, earliest, end, null);
+                if (cut > start) end = cut;
+            }
+
+            var piece = text.AsSpan(start, end - start).Trim();
+            if (piece.Length > 0)
+                pieces.Add((piece.ToString(), spaceBefore));
+            spaceBefore = char.IsWhiteSpace(text[end - 1]) || (end < text.Length && char.IsWhiteSpace(text[end]));
+            start = end;
+        }
+        return pieces;
+    }
+
+    /// <summary>
+    /// The last place in [from, to) to cut after: one of <paramref name="marks"/> that ends
+    /// a word (so not the stop in "3.5"), or any whitespace when marks is null. -1 if none.
+    /// </summary>
+    private static int LastBreak(string text, int from, int to, string? marks)
+    {
+        for (int i = to - 1; i >= from; i--)
+        {
+            char c = text[i];
+            if (marks == null ? char.IsWhiteSpace(c)
+                : marks.Contains(c) && (c > 0x2000 || i + 1 == text.Length || char.IsWhiteSpace(text[i + 1])))
+                return i + 1;
+        }
+        return -1;
+    }
+
+    private async Task<string?> QueryAsync(string text, string src, string tgt, CancellationToken ct)
+    {
         var url = $"{Endpoint}?q={Uri.EscapeDataString(text)}&langpair={src}|{tgt}";
         try
         {
