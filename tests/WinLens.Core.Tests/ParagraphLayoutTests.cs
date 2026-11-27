@@ -265,4 +265,112 @@ public class ParagraphLayoutTests
 
         Assert.Equal((168.0, 400.0), reach[1]);
     }
+
+    // ---- a single line that needs more room -------------------------------------
+
+    // Rows 20 high at full size.
+    private static ParagraphFit Rows(string text, double width, double height, double minScale = 0.4) =>
+        ParagraphLayout.Rows(text, width, height, 20, Measure, minScale);
+
+    [Fact]
+    public void Rows_TextThatFits_StaysOnOneRow()
+    {
+        var fit = Rows("see you on Saturday", 200, 60);
+
+        Assert.Equal(new[] { "see you on Saturday" }, fit.Lines);
+        Assert.Equal(1, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_TextTooWide_GoesOnTwoRowsAtFullSize_WhenThereIsHeight()
+    {
+        // 420 wide, in a bubble 260 wide with room for two rows.
+        var fit = Rows("the network is working thank you so much!!", 260, 44);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal(1, fit.Scale);
+        Assert.Equal("the network is working thank you so much!!", string.Join(' ', fit.Lines));
+        Assert.All(fit.Lines, l => Assert.True(Measure(l) <= 260));
+        // Two rows of about the same length, not a full one and a leftover word.
+        Assert.True(Math.Abs(Measure(fit.Lines[0]) - Measure(fit.Lines[1])) <= 60);
+    }
+
+    [Fact]
+    public void Rows_WithoutHeight_ShrinksOnOneRow()
+    {
+        var fit = Rows("the network is working thank you so much!!", 260, 20);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(260.0 / 420, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_AreNotAdded_ForASlightlyLargerFont()
+    {
+        // One row needs 0.9; two rows fit only at 0.95 for lack of height. Not worth it.
+        var fit = Rows("aaaaa bbbbb ccccc ddddd", 207, 38);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.9, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_UseAThird_WhenTwoStillShrinkTheText()
+    {
+        // 590 wide, rows of 200: two rows hold it at about 0.66, three at full size.
+        var fit = Rows("aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll", 200, 60);
+
+        Assert.Equal(3, fit.Lines.Count);
+        Assert.Equal(1, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_WithLittleHeight_AreSmaller_ButLargerThanOneRow()
+    {
+        // Height for two rows only at 0.8; one row would need 0.5.
+        var fit = Rows("aaaa bbbb cccc dddd eeee ffff gggg hhhh", 195, 32);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal(0.8, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_OneLongWord_CannotBeSplit()
+    {
+        var fit = Rows("Donaudampfschifffahrtsgesellschaft", 170, 60);
+
+        Assert.Single(fit.Lines);
+        Assert.Equal(0.5, fit.Scale, 3);
+    }
+
+    [Fact]
+    public void Rows_NeverGoBelowTheSmallestScale()
+    {
+        var fit = Rows("Donaudampfschifffahrtsgesellschaft", 34, 20, minScale: 0.4);
+
+        Assert.Equal(0.4, fit.Scale);
+    }
+
+    [Fact]
+    public void Rows_ChineseBreaksBetweenCharacters()
+    {
+        var fit = Rows("网络已经连上了，太谢谢你了！", 80, 44);
+
+        Assert.Equal(2, fit.Lines.Count);
+        Assert.Equal("网络已经连上了，太谢谢你了！", string.Concat(fit.Lines));
+        Assert.DoesNotContain(fit.Lines, l => l.StartsWith('，') || l.StartsWith('！'));
+    }
+
+    [Theory]
+    [InlineData("the network is\nworking", "the network is working")]
+    [InlineData("the network is \r\nworking", "the network is working")]
+    [InlineData("网络已经\n连上了", "网络已经连上了")]
+    [InlineData("连上了。\nThank you", "连上了。 Thank you")]
+    [InlineData("สวัสดี\nครับ", "สวัสดีครับ")]
+    [InlineData("one row", "one row")]
+    [InlineData("three\nshort\nrows", "three short rows")]
+    public void Unwrap_PutsTheTextBackOnOneLine(string rows, string expected)
+    {
+        Assert.Equal(expected, ParagraphLayout.Unwrap(rows));
+    }
 }

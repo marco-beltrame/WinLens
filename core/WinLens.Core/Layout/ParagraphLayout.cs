@@ -103,6 +103,83 @@ public static class ParagraphLayout
         return new ParagraphFit(Lines(tokens, ends), scale);
     }
 
+    // Another row has to buy a font at least this much larger, or the text stays as it is.
+    private const double RowGain = 1.12;
+
+    /// <summary>
+    /// Fits the translation of a single line into the room it has. On one row when that is
+    /// wide enough; otherwise on two or three, when there is height for them and the text
+    /// stays clearly larger that way than squeezed onto one.
+    /// </summary>
+    /// <param name="width">The widest a row may become, at scale 1.</param>
+    /// <param name="height">The height all rows may take together.</param>
+    /// <param name="rowHeight">The height of one row at scale 1.</param>
+    /// <param name="measure">Width of a string at scale 1. Must count a lone space.</param>
+    /// <param name="minScale">Smallest scale worth reading.</param>
+    /// <returns>The rows, top to bottom, and the scale. A single row may still be too wide at that scale.</returns>
+    public static ParagraphFit Rows(
+        string text, double width, double height, double rowHeight,
+        Func<string, double> measure, double minScale, int maxRows = 3)
+    {
+        IReadOnlyList<string> rows = new[] { text };
+        double whole = measure(text);
+        if (whole <= width || width <= 0 || rowHeight <= 0)
+            return new ParagraphFit(rows, 1);
+
+        minScale = Math.Clamp(minScale, 0.01, 1);
+        double best = Math.Max(minScale, width / whole);
+        for (int m = 2; m <= maxRows; m++)
+        {
+            double byHeight = height / (m * rowHeight);
+            if (byHeight < best * RowGain) break;   // and more rows would be smaller still
+
+            var widths = Enumerable.Repeat(width, m).ToArray();
+            var fit = Flow(text, widths, widths, measure, minScale);
+            if (fit.Lines.Any(l => l.Length == 0)) break;   // nothing left to put on them
+
+            double scale = Math.Min(Math.Min(1, byHeight), fit.Scale);
+            if (scale >= best * RowGain)
+            {
+                best = scale;
+                rows = fit.Lines;
+            }
+        }
+        return new ParagraphFit(rows, best);
+    }
+
+    /// <summary>
+    /// Takes the row breaks of <see cref="Rows"/> out of a piece of text again: a space
+    /// where two words met, nothing between characters of a script written without spaces.
+    /// </summary>
+    public static string Unwrap(string rows)
+    {
+        if (!rows.Contains('\n')) return rows;
+
+        var sb = new StringBuilder(rows.Length);
+        for (int i = 0; i < rows.Length; i++)
+        {
+            char c = rows[i];
+            if (c == '\r') continue;
+            if (c != '\n')
+            {
+                sb.Append(c);
+                continue;
+            }
+
+            bool apart = sb.Length > 0 && i + 1 < rows.Length
+                && !(WrittenWithoutSpaces(sb[^1]) && WrittenWithoutSpaces(rows[i + 1]));
+            if (apart && sb[^1] != ' ') sb.Append(' ');
+        }
+        return sb.ToString();
+    }
+
+    private static bool WrittenWithoutSpaces(char c) =>
+        char.IsSurrogate(c)                        // ideographs beyond the basic plane
+        || IsBreakable(new Rune(c))
+        || c is >= '\u0E00' and <= '\u0EFF'      // Thai, Lao
+           or >= '\u1000' and <= '\u109F'        // Myanmar
+           or >= '\u1780' and <= '\u17FF';       // Khmer
+
     /// <summary>
     /// The rows a translated paragraph is drawn in: the original lines made equally tall
     /// and evenly spaced. OCR boxes hug the ink, so a line without descenders is shorter

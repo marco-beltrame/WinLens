@@ -15,6 +15,14 @@ All notable changes to this project are documented here. The format is based on
 - A sentence that wraps over several lines is now translated as one sentence instead of line
   by line, so it keeps its meaning and reads naturally. The translation is laid back over the
   same lines. Menus, lists and chat messages are still translated one line at a time (#42).
+- A translation longer than the original no longer comes out tiny or cut off. A title, a menu
+  entry or a chat message first uses the free space next to it, then goes onto a second or
+  third row, and only after that gets a smaller font. This shows most from Chinese or Japanese
+  into English and other European languages.
+
+### Fixed
+- The box behind a translation takes the exact colour of a flat background, so it no longer
+  shows as a slightly lighter or darker patch next to other text or near the edge of a card.
 
 ## [1.3.0] - 2026-10-14
 
