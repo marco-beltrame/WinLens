@@ -63,18 +63,18 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Reads Latin and CJK (Chinese, Japanese, Korean) on the same screen.
 - Global hotkey, default <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>.
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
-- Dark control panel. You can change the target language straight from the overlay.
+- Clean control panel that follows the Windows light or dark mode. You can change the target language straight from the overlay.
 - Right-click a block to copy the original text or the translation.
 - Works out of the box with Google Translate, or with your own LibreTranslate server or a local AI model (Ollama, LM Studio) so your text never leaves your PC.
 - Optional "launch at startup". Otherwise it stays out of the way in the tray.
 
 ## Control panel
 
-A small tray app with a dark control panel. Pick the target language, set the hotkey,
-choose the OCR source language, and toggle launch-at-startup.
+A small tray app with a control panel that follows the Windows light or dark mode. Pick the
+languages and the translation engine, set the shortcuts, and toggle launch-at-startup.
 
 <div align="center">
-<img src="assets/settings.png" alt="WinLens control panel" width="330"/>
+<img src="assets/settings.png" alt="WinLens control panel in dark and light mode, and the tray menu" width="860"/>
 </div>
 
 ## Translation engines and privacy
@@ -126,28 +126,29 @@ Most systems already have your display language. To add more (for example Chines
 
 > Settings > Time & Language > Language & region > (your language) > Language options > Optional features > add the OCR feature.
 
-The "Add OCR languages in Windows" link in the control panel opens that page for you. Newly
-installed languages show up automatically.
+In the control panel, **Add languages…** at the bottom of the **Translate from** list opens
+that page for you. Newly installed languages show up automatically.
 
 ## Usage
 
 1. Launch WinLens. The control panel opens the first time, then it minimizes to the tray.
 2. Pick a target language in the control panel.
 3. Press the hotkey (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>) anywhere in Windows.
-4. The screen is translated in place. Press <kbd>Esc</kbd> or Close to dismiss.
+4. The screen is translated in place. Press <kbd>Esc</kbd> or the ✕ button to dismiss.
 
 | Action | How |
 | --- | --- |
-| Translate now | Hotkey, tray menu, or the control panel button |
-| Open the control panel | Double-click the tray icon, or tray menu > Open WinLens |
+| Translate the screen | Hotkey, tray menu, or **Translate screen** in the control panel |
+| Translate a region | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>, tray menu, or **Region** in the control panel, then drag |
+| Open the control panel | Double-click the tray icon, or tray menu > Settings |
 | Change target language | Control panel, or the overlay's top bar (re-translates live) |
-| Change the hotkey | Control panel > Change, then press your combination |
-| Pick the source (OCR) language | Control panel > Detect text in (leave on Auto unless you need speed) |
+| Change a shortcut | Control panel > click the shortcut, then press your combination |
+| Pick the source (OCR) language | Control panel > Translate from (leave on Auto unless you need speed) |
 | Copy text | Right-click a translated block > Copy original / Copy translation |
 | Launch at startup | Control panel toggle |
 | Quit | Tray menu > Exit |
 
-Leaving "Detect text in" on Auto is usually best: WinLens runs every installed recognizer and
+Leaving "Translate from" on Auto is usually best: WinLens runs every installed recognizer and
 keeps the text each one reads well, so a mixed-language screen still works. Forcing a single
 language only saves a little time.
 

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- A new look across the app: cleaner control panel, tray menu, overlay bar and loading
+  indicator, with a single accent colour and simple line icons.
+- WinLens follows the Windows light or dark mode, and switches as soon as Windows does.
+- The tray menu shows the current shortcuts next to **Translate screen** and
+  **Translate region**; **Open WinLens** is now **Settings**.
+- The control panel has a **Region** button next to **Translate screen**, and shows each
+  shortcut as keys: click it to change it.
+- "Detect text in" is now **Translate from**, and the link to add OCR languages moved to the
+  bottom of that list.
+
 ## [1.3.0] - 2026-10-14
 
 ### Added
