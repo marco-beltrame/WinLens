@@ -10,11 +10,16 @@ All notable changes to this project are documented here. The format is based on
 - On the overlay, <kbd>Ctrl</kbd> + <kbd>C</kbd> copies the whole translation, top to bottom.
 - Hold <kbd>Space</kbd> on the overlay to see the original text; release it to bring the
   translation back.
+- Press <kbd>Esc</kbd> while the spinner shows to cancel a translation that is taking too long.
 
 ### Changed
 - A sentence that wraps over several lines is now translated as one sentence instead of line
   by line, so it keeps its meaning and reads naturally. The translation is laid back over the
   same lines. Menus, lists and chat messages are still translated one line at a time (#42).
+- A translation longer than the original no longer comes out tiny or cut off. A title, a menu
+  entry or a chat message first uses the free space next to it, then goes onto a second or
+  third row, and only after that gets a smaller font. This shows most from Chinese or Japanese
+  into English and other European languages.
 - A new look across the app: cleaner control panel, tray menu, overlay bar and loading
   indicator, with a single accent colour and simple line icons.
 - WinLens follows the Windows light or dark mode, and switches as soon as Windows does.
@@ -24,6 +29,15 @@ All notable changes to this project are documented here. The format is based on
   shortcut as keys: click it to change it.
 - "Detect text in" is now **Translate from**, and the link to add OCR languages moved to the
   bottom of that list.
+
+### Fixed
+- The box behind a translation takes the exact colour of a flat background, so it no longer
+  shows as a slightly lighter or darker patch next to other text or near the edge of a card.
+- Small text at 125 % and 150 % display scaling no longer loses the bottoms of letters like g, p and y.
+- Chinese and Japanese text no longer gets stray spaces between characters from Windows OCR (#39).
+- The app stays responsive while it reads a large screen, and an error while showing the
+  overlay closes the overlay instead of the whole app (#36).
+- Fewer wasted retries and wrong results with LibreTranslate, the local model and MyMemory (#35).
 
 ## [1.3.0] - 2026-10-14
 

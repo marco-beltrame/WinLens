@@ -61,6 +61,7 @@ If a browser tab already translates it, you don't need WinLens. For everything e
 - Translates on-screen text in place: the translation replaces the original, with a matching background and font, instead of appearing in a separate box.
 - Works on any window (apps, games, chats, documents), not just the browser.
 - A sentence that wraps over several lines is translated as one sentence, then laid back over the same lines.
+- A translation longer than the original keeps its size: it uses the free space next to the line, or a second row, before the text gets smaller.
 - Reads Latin and CJK (Chinese, Japanese, Korean) on the same screen.
 - Global hotkey, default <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>T</kbd>.
 - Upscales the screenshot before OCR and picks the best recognizer per text block, which helps accuracy on small text.
@@ -174,7 +175,9 @@ Hotkey > capture screen > upscale > OCR (per script) > paragraphs > translate > 
    chat messages and anything doubtful stay separate.
 5. Translate the whole screen in one request (Google by default, or your own engine), cached per session.
 6. Draw an opaque, color- and font-matched box over each original line. A paragraph's
-   translation is spread over the lines it came from, in one font size.
+   translation is spread over the lines it came from, in one font size. A single line whose
+   translation is longer runs on over the plain background beside it, or wraps onto a second
+   or third row where there is room, before the font shrinks.
 
 ## Roadmap
 
