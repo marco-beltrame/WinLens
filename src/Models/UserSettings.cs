@@ -36,7 +36,9 @@ public sealed class UserSettings
     /// <summary>API key encrypted for the current Windows user (DPAPI), base64.</summary>
     public string? LibreTranslateKeyProtected { get; set; }
 
-    public string LlmUrl { get; set; } = "http://localhost:11434/v1";
+    public const string DefaultLlmUrl = "http://localhost:11434/v1";
+
+    public string LlmUrl { get; set; } = DefaultLlmUrl;
     /// <summary>Empty = the first model the server lists.</summary>
     public string LlmModel { get; set; } = "";
     /// <summary>API key encrypted for the current Windows user (DPAPI), base64.</summary>
@@ -72,7 +74,7 @@ public sealed class UserSettings
         RecentLanguages = SettingsRules.NormalizeRecent(RecentLanguages, 4);
         TranslationEngine = EngineNames.Normalize(TranslationEngine);
         LibreTranslateUrl = LibreTranslateUrl?.Trim() ?? "";
-        LlmUrl = string.IsNullOrWhiteSpace(LlmUrl) ? "http://localhost:11434/v1" : LlmUrl.Trim();
+        LlmUrl = string.IsNullOrWhiteSpace(LlmUrl) ? DefaultLlmUrl : LlmUrl.Trim();
         LlmModel = LlmModel?.Trim() ?? "";
 
         bool reset = false;

@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- On the overlay, <kbd>Ctrl</kbd> + <kbd>C</kbd> copies the whole translation, top to bottom.
+- Hold <kbd>Space</kbd> on the overlay to see the original text; release it to bring the
+  translation back.
+
 ### Changed
 - A new look across the app: cleaner control panel, tray menu, overlay bar and loading
   indicator, with a single accent colour and simple line icons.

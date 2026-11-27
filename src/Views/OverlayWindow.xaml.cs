@@ -92,6 +92,10 @@ public partial class OverlayWindow : Window
         PopulateLanguages();
 
         KeyDown += OnKeyDown;
+        // Preview: Space must reach us even when the language box has keyboard focus.
+        PreviewKeyDown += OnPreviewKeyDown;
+        PreviewKeyUp += OnPreviewKeyUp;
+        Deactivated += (_, _) => ShowOriginal(false);
         // OverlayCanvas sits on top and fills the window, so it receives every click that
         // a translation box doesn't handle first — including clicks over the dimmed area.
         OverlayCanvas.MouseLeftButtonDown += (_, _) => Close();
@@ -117,8 +121,9 @@ public partial class OverlayWindow : Window
             // coordinates land on the right physical pixels.
             _pixelToDip = WindowPlacement.PixelToDip(this, _pixelToDip);
 
-            PlaceBackgroundImage();
-            BuildOverlayBoxes();
+            // Loaded runs after Show() has returned, outside the caller's try/catch: a
+            // failure here would otherwise take the whole tray app down.
+            if (!TryLayout()) return;
             BeginAnimation(OpacityProperty,
                 new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(150))));
             Activate();
@@ -135,9 +140,22 @@ public partial class OverlayWindow : Window
         // The boxes were laid out for the old DPI; rebuild them so they stay over the
         // original text. Block state (translations) lives on the OcrBlocks, so nothing is lost.
         if (IsLoaded)
+            TryLayout();
+    }
+
+    private bool TryLayout()
+    {
+        try
         {
             PlaceBackgroundImage();
             BuildOverlayBoxes();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Close();
+            MessageBox.Show(ex.Message, "WinLens — error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 
@@ -446,6 +464,37 @@ public partial class OverlayWindow : Window
     {
         if (e.Key == Key.Escape) Close();
     }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (LanguageBox.IsDropDownOpen) return;
+
+        // Hold Space to peek at the original text under the translation.
+        if (e.Key == Key.Space)
+        {
+            ShowOriginal(true);
+            e.Handled = true;
+        }
+        // Ctrl+C copies the whole translation, top to bottom — unless some text is
+        // selected in one of the boxes: then it is the usual copy of that selection.
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control
+                 && Keyboard.FocusedElement is not TextBox { SelectionLength: > 0 })
+        {
+            var text = string.Join(Environment.NewLine, _blocks
+                .OrderBy(b => b.BoundingRect.Y).ThenBy(b => b.BoundingRect.X)
+                .Select(b => string.IsNullOrWhiteSpace(b.TranslatedText) ? b.OriginalText : b.TranslatedText));
+            try { Clipboard.SetText(text); } catch { /* clipboard busy */ }
+            e.Handled = true;
+        }
+    }
+
+    private void OnPreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space) ShowOriginal(false);
+    }
+
+    private void ShowOriginal(bool show) =>
+        OverlayCanvas.Opacity = show ? 0 : 1; // Opacity, not Visibility: it keeps swallowing clicks
 
     /// <summary>
     /// Copies the screenshot into a frozen WPF bitmap. This used to encode the whole
