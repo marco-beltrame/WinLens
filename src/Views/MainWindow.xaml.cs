@@ -313,7 +313,8 @@ public partial class MainWindow : Window, IDisposable
             try { escape.Register(HotkeyModifiers.None, Key.Escape); }
             catch (InvalidOperationException) { /* another app holds Esc: no cancel this time */ }
 
-            var blocks = await _ocr.RecognizeAsync(capture.Bitmap, _settings.Current.SourceLanguage);
+            var blocks = await _ocr.RecognizeAsync(
+                capture.Bitmap, _settings.Current.SourceLanguage, _settings.Current.GroupParagraphs);
             cancel.Token.ThrowIfCancellationRequested();
             if (blocks.Count == 0)
             {
@@ -414,7 +415,7 @@ public partial class MainWindow : Window, IDisposable
     /// </summary>
     private void WarnIfNothingChanged(System.Collections.Generic.List<OcrBlock> blocks, string target)
     {
-        if (blocks.Count < 4) return;
+        if (blocks.Sum(b => Math.Max(1, b.LineRects.Count)) < 4) return;
         if (blocks.Any(b => !string.Equals(b.TranslatedText, b.OriginalText, StringComparison.Ordinal)))
             return;
 

@@ -12,6 +12,13 @@ public sealed class UserSettings
     /// <summary>OCR source language tag, or "auto" to try all installed recognizers.</summary>
     public string SourceLanguage { get; set; } = "auto";
 
+    /// <summary>
+    /// Translate the wrapped lines of a paragraph together instead of line by line. On by
+    /// default; there is no switch for it in the window, only here in settings.json, for
+    /// a screen where lines that belong apart get joined.
+    /// </summary>
+    public bool GroupParagraphs { get; set; } = true;
+
     /// <summary>Most-recently-used target language codes, most recent first (experimental).</summary>
     public System.Collections.Generic.List<string> RecentLanguages { get; set; } = new();
 

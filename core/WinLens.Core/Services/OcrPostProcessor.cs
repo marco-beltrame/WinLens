@@ -68,10 +68,10 @@ public static class OcrPostProcessor
         };
     }
 
-    // Per-character writing system.
-    private enum Glyph { Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Thai, Han, Kana, Hangul }
+    /// <summary>Per-character writing system; anything unrecognized counts as Latin.</summary>
+    internal enum Glyph { Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Thai, Han, Kana, Hangul }
 
-    private static Glyph GlyphOf(char c)
+    internal static Glyph GlyphOf(char c)
     {
         if (c >= 0x4E00 && c <= 0x9FFF || c >= 0x3400 && c <= 0x4DBF) return Glyph.Han;
         if (c >= 0x3040 && c <= 0x30FF || c >= 0x31F0 && c <= 0x31FF) return Glyph.Kana;
